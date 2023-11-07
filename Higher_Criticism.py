@@ -56,7 +56,7 @@ class Higher_Criticism:
                    linestyles='dashed', colors='red')
         plt.xlabel(xlabel='Sorted Samples by P-value')
         plt.ylabel(ylabel='HC values')
-        plt.xlim(xmin=1, xmax=len(hc_objectives))
+        plt.xlim(xmin=0, xmax=len(hc_objectives))
         plt.legend()
         plt.show()
 
