@@ -19,7 +19,7 @@ class Higher_Criticism:
     def run_sorted_p(self, p_values_sorted: np.ndarray) -> None:
         if self.use_import:
             mtest = MultiTest(p_values_sorted)
-            _, _ = mtest.hc(gamma=self.gamma)
+            _, self.p_threshold = mtest.hc(gamma=self.gamma)
             self.objectives = mtest._zz
             self.original_num_rejected = np.sum(p_values_sorted <= self.p_threshold)
         else:
