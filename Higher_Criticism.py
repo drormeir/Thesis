@@ -2,16 +2,42 @@ from multitest import MultiTest
 import matplotlib.pyplot as plt
 import numpy as np
 import math
+from Synthetic_Data_Generators import Data_Generator_Base
+from tqdm import tqdm
 
 class Higher_Criticism:
     def __init__(self, use_import: bool, gamma: float = 0.99, correct_symetric_baseline_p_values: bool = True):
         self.use_import = use_import
         self.correct_symetric_baseline_p_values = correct_symetric_baseline_p_values
         self.gamma = gamma
-        self.original_num_rejected = 0
         self.num_rejected = 0
         self.p_threshold = 0
         self.best_objective = 0
+
+    def monte_carlo_statistics(self, monte_carlo: int, data_generator: Data_Generator_Base, disable_tqdm: bool = False) -> dict:
+        nums_rejected = []
+        best_objectives = []
+        first_drawdown = []
+        first_p_value = []
+        lowest_angle = []
+        N = data_generator.N
+        angle_x_axis = np.arange(start=0.5,stop=N+0.1,step=1, dtype=np.float32)
+        for i in tqdm(range(monte_carlo), disable=disable_tqdm):
+            data_generator.generate(seed=i)
+            p_values = np.sort(data_generator.p_values)
+            self.run_sorted_p(p_values)
+            # collecting data from objective function
+            best_objectives.append(self.best_objective)
+            nums_rejected.append(self.num_rejected)
+            objectives = self.objectives
+            first_drawdown.append(objectives[0] - objectives[:self.num_rejected+1].min())
+            first_p_value.append(p_values[0])
+            lowest_angle.append((p_values/angle_x_axis).min())
+        return {'nums_rejected' : nums_rejected,
+                'best_objectives':best_objectives,
+                'first_drawdown':first_drawdown,
+                'first_p_value': first_p_value,
+                'lowest_angle':lowest_angle}
 
     def run_unsorted_p(self, p_values_unsorted: np.ndarray) -> None:
         self.run_sorted_p(np.sort(p_values_unsorted))
@@ -19,9 +45,9 @@ class Higher_Criticism:
     def run_sorted_p(self, p_values_sorted: np.ndarray) -> None:
         if self.use_import:
             mtest = MultiTest(p_values_sorted)
-            _, self.p_threshold = mtest.hc(gamma=self.gamma)
-            self.objectives = mtest._zz
-            self.original_num_rejected = np.sum(p_values_sorted <= self.p_threshold)
+            mtest.hc(gamma=self.gamma)
+            _, self.p_threshold = self.objectives = mtest._zz
+            self.num_rejected = np.sum(p_values_sorted <= self.p_threshold)
         else:
             N = int(p_values_sorted.size)
             start = 0.5 if self.correct_symetric_baseline_p_values else 1.0
@@ -46,20 +72,17 @@ class Higher_Criticism:
                     ind_best = ind_objective
                     best_beyond = beyond_objective
                 ind_lowest_objective = min(ind_lowest_objective, ind_objective)
-            self.original_num_rejected = ind_best + 1
-        self.num_rejected = self.original_num_rejected
-        if self.original_num_rejected < 1:
+            self.num_rejected = ind_best + 1
+        if self.num_rejected < 1:
             self.p_threshold = 0
             self.best_objective = self.objectives[0]
         else:
-            self.best_objective = self.objectives[self.original_num_rejected-1]
-            if self.best_objective <= 0:
-                self.p_threshold = 0
-                self.num_rejected = 0
+            self.p_threshold = p_values_sorted[self.num_rejected-1]
+            self.best_objective = self.objectives[self.num_rejected-1]
 
     def plot_objectives(self, title: str = 'Higher Criticism objectives values'):
         hc_objectives = self.objectives
-        HC_best_ID = self.original_num_rejected
+        HC_best_ID = self.num_rejected
         plt.figure(figsize=(20,10))
         plt.title(label=title)
         plt.plot(np.arange(1,1+len(hc_objectives)), hc_objectives, label='HC objectives', c='blue')
