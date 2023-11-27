@@ -1,7 +1,9 @@
 import numpy as np
 from scipy.stats import norm
 import itertools
-
+import math
+from sklearn import metrics
+import functools
 
 class Data_Generator_Base:
     def __init__(self, N: int) -> None:
@@ -11,6 +13,24 @@ class Data_Generator_Base:
     def generate(self, seed: int) -> None:
         pass
 
+    @staticmethod
+    def params_pure_noise(N: int) -> dict:
+        return {'sizes': [N], 'mus': [0.], 'sigmas': [1.]}
+    
+    @staticmethod
+    def params_from_N_mu_fraction(N: int, mu: float, fraction: float) -> dict:
+        n = min(int(0.5+N*fraction),N)
+        if fraction >= 1e-9:
+            n = max(n,1)
+        if fraction <= 1-1e-9:
+            n = min(n, N-1)
+        return {'sizes': [N-n, n], 'mus': [0., mu], 'sigmas': [1.,1.]}
+
+    @staticmethod
+    def params_from_N_r_beta(N: int, r: float, beta: float) -> dict:
+        mu = math.sqrt(2*r*math.log(N))
+        fraction = math.pow(N,-beta)
+        return Data_Generator_Base.params_from_N_mu_fraction(N=N,mu=mu,fraction=fraction)
 
 class Multi_Class_Normal_Population(Data_Generator_Base):
     def __init__(self, sizes: list[int], mus: list[float], sigmas: list[float], sides: int = 1) -> None:
@@ -51,3 +71,23 @@ class Multi_Class_Normal_Population_Uniform(Multi_Class_Normal_Population):
 
 def Two_Lists_Tuple(list1: list, list2: list) -> list[tuple]:
     return list(itertools.product(list1,list2))
+
+def signal_2_noise_roc(signal_values, noise_values) -> tuple[float,np.ndarray,np.ndarray]:
+    sort_v_factor = -1 if np.mean(signal_values) > np.mean(noise_values) else 1
+    roc_values_tuples = []
+    for v in noise_values:
+        roc_values_tuples.append((0,v*sort_v_factor))
+    for v in signal_values:
+        roc_values_tuples.append((1,v*sort_v_factor))
+    def cmp_signal_values(t1, t2):
+        v1, v2 = t1[1], t2[1]
+        diff_v12 = v1 - v2
+        if abs(diff_v12) <= 1e-6*min(abs(v1),abs(v2)):
+            return t1[0] - t2[0]
+        return 1 if v1 > v2 else -1
+    sorted_tuples = sorted(roc_values_tuples, key = functools.cmp_to_key(cmp_signal_values))
+    sorted_labels = [roc_tuple[0] for roc_tuple in sorted_tuples]
+    sorted_values = [roc_tuple[1] for roc_tuple in reversed(sorted_tuples)]
+    fpr, tpr, _ = metrics.roc_curve(y_true=sorted_labels, y_score= sorted_values)
+    roc_auc = metrics.auc(fpr,tpr)
+    return float(roc_auc), fpr, tpr
