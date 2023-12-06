@@ -2,33 +2,36 @@ from multitest import MultiTest
 import matplotlib.pyplot as plt
 import numpy as np
 import math
-from Synthetic_Data_Generators import Data_Generator_Base
 from tqdm import tqdm
+from Synthetic_Data_Generators import Data_Generator_Base, signal_2_noise_roc
 
 class Higher_Criticism:
-    def __init__(self, use_import: bool, gamma: float = 1.0, correct_symetric_baseline_p_values: bool = True):
+    def __init__(self, use_import: bool, gamma: float = 1.0, correct_symetric_baseline_p_values: bool = True, global_max: bool = True):
         self.use_import = use_import
         self.start_baseline_index_p_values = 0.5 if correct_symetric_baseline_p_values else 1.0
         self.gamma = gamma
         self.num_rejected = 0
         self.p_threshold = 0
         self.best_objective = 0
+        self.global_max = global_max
 
     @staticmethod
-    def monte_carlo_statistics_HC(monte_carlo: int, data_generator: Data_Generator_Base, disable_tqdm: bool = False) -> dict:
-        results = [[],[],[]]
-        hc_models = [Higher_Criticism(use_import=True), Higher_Criticism(use_import=False,correct_symetric_baseline_p_values=False),
-                     Higher_Criticism(use_import=False, correct_symetric_baseline_p_values=True)]
-        N = data_generator.N
-        for i in tqdm(range(monte_carlo), disable=disable_tqdm):
-            data_generator.generate(seed=i)
-            p_values = np.sort(data_generator.p_values)
-            for r,hc in zip(results,hc_models):
-                hc.run_sorted_p(p_values)
-                r.append(hc.best_objective)
-        return {'import_HC' : results[0],
-                'HC_1_0':results[1],
-                'HC_0_5': results[2]}
+    def monte_carlo_statistics_HC(monte_carlo: int, data_generator: Data_Generator_Base) -> dict:
+        hc_keys = ['import_HC_1_0', 'import_HC_0_3', 'HC_1_0', 'HC_0_5', 'HC_1_0_max', 'HC_0_5_max']
+        hc_models = [Higher_Criticism(use_import=True, gamma=1.0),
+                     Higher_Criticism(use_import=True, gamma=0.3),
+                     Higher_Criticism(use_import=False,correct_symetric_baseline_p_values=False, global_max=False),
+                     Higher_Criticism(use_import=False, correct_symetric_baseline_p_values=True, global_max=False),
+                     Higher_Criticism(use_import=False,correct_symetric_baseline_p_values=False, global_max=True),
+                     Higher_Criticism(use_import=False, correct_symetric_baseline_p_values=True, global_max=True)]
+        noise_generator = Data_Generator_Base(data_generator.N)
+        signal_values = Higher_Criticism.monte_carlo_best_objectives(models=hc_models, data_generator=data_generator, monte_carlo=monte_carlo)
+        noise_values = Higher_Criticism.monte_carlo_best_objectives(models=hc_models, data_generator=noise_generator, monte_carlo=monte_carlo)
+        result = {}
+        for ind_model, key_model in enumerate(hc_keys):
+            auc, _, _ = signal_2_noise_roc(signal_values=signal_values[ind_model], noise_values=noise_values[ind_model])
+            result[key_model] = auc
+        return result
     
     def monte_carlo_statistics(self, monte_carlo: int, data_generator: Data_Generator_Base, disable_tqdm: bool = False) -> dict:
         nums_rejected = []
@@ -51,13 +54,24 @@ class Higher_Criticism:
                 'first_p_value': first_p_value,
                 'lowest_angle':lowest_angle}
 
+    @staticmethod
+    def monte_carlo_best_objectives(models: list, data_generator: Data_Generator_Base, monte_carlo: int) -> np.ndarray:
+        ret = np.empty(shape=(len(models),monte_carlo), dtype=np.float32)
+        for j in range(monte_carlo):
+            data_generator.generate(seed=j)
+            p_values = np.sort(data_generator.p_values)
+            for i, hc in enumerate(models):
+                hc.run_sorted_p(p_values)
+                ret[i,j] = hc.best_objective
+        return ret
+
     def run_unsorted_p(self, p_values_unsorted: np.ndarray) -> None:
         self.run_sorted_p(np.sort(p_values_unsorted))
 
     def run_sorted_p(self, p_values_sorted: np.ndarray) -> None:
         N = int(p_values_sorted.size)
-        gamma = min(self.gamma, (N-1)/N)  # avoid last element devision by zero
         if self.use_import:
+            gamma = min(self.gamma, (N-1)/N)  # avoid last element devision by zero
             mtest = MultiTest(p_values_sorted)
             _, self.p_threshold = mtest.hc(gamma=gamma)
             self.objectives = mtest._zz
@@ -74,16 +88,19 @@ class Higher_Criticism:
                 denominator = denominator[:ind_zero]            
             self.objectives = nominator / denominator
             self.objectives = self.objectives[:int(N*self.gamma)]
-            sorted_objectives = self.objectives.argsort()[::-1]
-            ind_lowest_objective = N - 1
-            ind_best = N - 1
-            best_beyond = 0
-            for ind_objective in sorted_objectives:
-                beyond_objective = ind_lowest_objective - ind_objective
-                if beyond_objective >= best_beyond:
-                    ind_best = ind_objective
-                    best_beyond = beyond_objective
-                ind_lowest_objective = min(ind_lowest_objective, ind_objective)
+            if self.global_max:
+                ind_best = np.argmax(self.objectives)
+            else:
+                ind_best = N - 1
+                ind_lowest_objective = N - 1
+                best_beyond = 0
+                sorted_objectives = self.objectives.argsort()[::-1]
+                for ind_objective in sorted_objectives:
+                    beyond_objective = ind_lowest_objective - ind_objective
+                    if beyond_objective >= best_beyond:
+                        ind_best = ind_objective
+                        best_beyond = beyond_objective
+                    ind_lowest_objective = min(ind_lowest_objective, ind_objective)
             self.num_rejected = ind_best + 1
         if self.num_rejected < 1:
             self.p_threshold = 0

@@ -11,7 +11,8 @@ class Data_Generator_Base:
         self.p_values = np.empty(shape=0)
 
     def generate(self, seed: int) -> None:
-        pass
+        np.random.seed(seed=seed)
+        self.p_values = np.random.uniform(size=self.N)
 
     @staticmethod
     def params_pure_noise(N: int) -> dict:
