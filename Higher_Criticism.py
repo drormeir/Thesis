@@ -16,10 +16,10 @@ class Higher_Criticism:
         self.gamma_power = gamma_power
 
     @staticmethod
-    def monte_carlo_statistics_HC(hc_models: list, monte_carlo: int, data_generator: Data_Generator_Base) -> dict:
-        noise_generator = Data_Generator_Base(data_generator.N)
-        signal_values = Higher_Criticism.monte_carlo_best_objectives(hc_models=hc_models, data_generator=data_generator, monte_carlo=monte_carlo)
-        noise_values = Higher_Criticism.monte_carlo_best_objectives(hc_models=hc_models, data_generator=noise_generator, monte_carlo=monte_carlo)
+    def monte_carlo_statistics_HC(hc_models: list, noise_values: np.ndarray, data_generator: Data_Generator_Base, disable_tqdm: bool) -> dict:
+        monte_carlo = noise_values.shape[1]
+        signal_values = Higher_Criticism.monte_carlo_best_objectives(hc_models=hc_models, data_generator=data_generator,\
+                                                                     monte_carlo=monte_carlo, disable_tqdm=disable_tqdm)
         result = {}
         for ind_model, hc_model in enumerate(hc_models):
             auc, _, _ = signal_2_noise_roc(signal_values=signal_values[ind_model], noise_values=noise_values[ind_model])
@@ -58,9 +58,9 @@ class Higher_Criticism:
                 'lowest_angle':lowest_angle}
 
     @staticmethod
-    def monte_carlo_best_objectives(hc_models: list, data_generator: Data_Generator_Base, monte_carlo: int) -> np.ndarray:
+    def monte_carlo_best_objectives(hc_models: list, data_generator: Data_Generator_Base, monte_carlo: int, disable_tqdm: bool) -> np.ndarray:
         ret = np.empty(shape=(len(hc_models),monte_carlo), dtype=np.float32)
-        for j in range(monte_carlo):
+        for j in tqdm(range(monte_carlo), disable=disable_tqdm):
             data_generator.generate(seed=j)
             p_values = np.sort(data_generator.p_values)
             for i, hc_model in enumerate(hc_models):
