@@ -6,14 +6,14 @@ from tqdm import tqdm
 from Synthetic_Data_Generators import Data_Generator_Base, signal_2_noise_roc
 
 class Higher_Criticism:
-    def __init__(self, use_import: bool = False, gamma: float = 1.0, global_max: bool = True, gamma_power: float = -1.):
-        self.use_import = use_import
+    def __init__(self, work_mode: str = 'hc', gamma: float = 0.3, global_max: bool = True):
+        self.work_mode = work_mode.lower()
+        assert self.work_mode in ['hc', 'import', 'bonferroni', 'bh']
         self.gamma = gamma
         self.num_rejected = 0
         self.p_threshold = 0
         self.best_objective = 0
         self.global_max = global_max
-        self.gamma_power = gamma_power
 
     @staticmethod
     def monte_carlo_statistics_HC(hc_models: list, noise_values: np.ndarray, data_generator: Data_Generator_Base, disable_tqdm: bool) -> dict:
@@ -27,10 +27,14 @@ class Higher_Criticism:
         return result
     
     def __str__(self) -> str:
-        ret = 'import_' if self.use_import else ''
-        ret += 'HC_'
-        if self.gamma_power >= 0:
-            ret += f'gammapower_{self.gamma_power:.2f}'
+        if self.work_mode == 'bonferroni':
+            return 'Bonferroni'
+        if self.work_mode == 'bh':
+            return 'Benjamini Hochberg'
+        ret = 'HC' if 'hc' == self.work_mode else 'import_HC'
+        ret += '_'
+        if self.gamma <= 0:
+            ret += f'gammapower_{-self.gamma:.2f}'
         else:
             ret += f'gamma_{self.gamma:.2f}'
         ret += f'_{"global" if self.global_max else "local"}_max'
@@ -73,13 +77,13 @@ class Higher_Criticism:
 
     def run_sorted_p(self, p_values_sorted: np.ndarray) -> None:
         N = int(p_values_sorted.size)
-        gamma = N**(self.gamma_power-1.0) if self.gamma_power >= 0 else self.gamma
-        if self.use_import:
+        gamma = N**(-self.gamma-1.0) if self.gamma <= 0 else self.gamma
+        if self.work_mode == 'import':
             mtest = MultiTest(p_values_sorted)
             _, self.p_threshold = mtest.hc(gamma=gamma)  # avoid last element division by zero
             self.objectives = mtest._zz
             self.num_rejected = np.sum(p_values_sorted <= self.p_threshold)
-        else:
+        elif self.work_mode == 'hc':
             i_N = np.arange(1,N+1) / N
             nominator = math.sqrt(N)*(i_N - p_values_sorted)
             denominator = np.sqrt(i_N*(1-i_N))
@@ -104,12 +108,19 @@ class Higher_Criticism:
                         best_beyond = beyond_objective
                     ind_lowest_objective = min(ind_lowest_objective, ind_objective)
             self.num_rejected = ind_best + 1
+        elif self.work_mode == 'bonferroni':
+            self.objectives = 1 - p_values_sorted
+            self.num_rejected = 1
+        else:  # Benjamini Hochberg
+            self.objectives = - p_values_sorted / np.arange(1,N+1)
+            self.num_rejected = np.argmax(self.objectives) + 1
         if self.num_rejected < 1:
             self.p_threshold = 0
             self.best_objective = self.objectives[0]
         else:
             self.p_threshold = p_values_sorted[self.num_rejected-1]
             self.best_objective = self.objectives[self.num_rejected-1]
+
 
     def plot_objectives(self, title: str = 'Higher Criticism objectives values'):
         hc_objectives = self.objectives
