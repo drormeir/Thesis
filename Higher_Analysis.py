@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+from tqdm import tqdm
+import numpy as np
 
 from Synthetic_Data_Generators import Multi_Class_Normal_Population as Data_Generator
 from Synthetic_Data_Generators import Two_Lists_Tuple, Data_Generator_Base
@@ -25,13 +27,15 @@ def asymptotic_analysis(N_range: list[int], beta_range: list[float], r_range: li
         max_auc = 0
         for key in collect_results:
             auc = collect_results[key][:, ind_r, ind_beta].reshape(-1)
-            line_params = {'linestyle': 'dashed' if 'power' in key else 'solid'}
+            # dictionary type hinting to avoid warnings
+            line_params: dict[str, int | str] = {'linestyle': 'dashed' if 'power' in key else 'solid'}
             if 'B' in key:
                 line_params['linewidth'] = 3
             ax.plot(N_range, auc, label=key, **line_params)
             max_auc = max(max_auc, auc.max())
         if max_auc >= 0.9:
             ax.set_ylim(top=1.0)
+        ax.set_xlim(left=0)
         ax.set_title(f'AUC values as function of number of samples using {monte_carlo} monte carlo runs.\n' + f'r={r:.2f} beta={beta:.2f}')
         ax.legend(loc='center right', bbox_to_anchor=(1.7, 0.5))
         plt.show()
