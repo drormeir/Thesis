@@ -29,7 +29,7 @@ def asymptotic_analysis(N_range: list[int], beta_range: list[float], r_range: li
             auc = collect_results[key][:, ind_r, ind_beta].reshape(-1)
             # dictionary type hinting to avoid warnings
             line_params: dict[str, int | str] = {'linestyle': 'dashed' if 'power' in key else 'solid'}
-            if 'B' in key:
+            if 'HC' not in key:
                 line_params['linewidth'] = 3
             ax.plot(N_range, auc, label=key, **line_params)
             max_auc = max(max_auc, auc.max())

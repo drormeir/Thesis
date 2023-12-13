@@ -3,12 +3,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import math
 from tqdm import tqdm
+from scipy.stats import kstest
 from Synthetic_Data_Generators import Data_Generator_Base, signal_2_noise_roc
 
 class Higher_Criticism:
     def __init__(self, work_mode: str = 'hc', gamma: float = 0.3, global_max: bool = True):
         self.work_mode = work_mode.lower()
-        assert self.work_mode in ['hc', 'import', 'bonferroni', 'bh']
+        assert self.work_mode in ['hc', 'import', 'bonferroni', 'bh', 'ks1', 'ks2']
         self.gamma = gamma
         self.num_rejected = 0
         self.p_threshold = 0
@@ -31,6 +32,13 @@ class Higher_Criticism:
             return 'Bonferroni'
         if self.work_mode == 'bh':
             return 'Benjamini Hochberg'
+        if 'ks' in self.work_mode:
+            ret = 'Kolmogorov-Smirnov '
+            if '1' in self.work_mode:
+                ret += 'one'
+            else:
+                ret += 'two'
+            return ret
         ret = 'HC' if 'hc' == self.work_mode else 'import_HC'
         ret += '_'
         if self.gamma <= 0:
@@ -80,7 +88,7 @@ class Higher_Criticism:
         gamma = N**(-self.gamma-1.0) if self.gamma <= 0 else self.gamma
         if self.work_mode == 'import':
             mtest = MultiTest(p_values_sorted)
-            _, self.p_threshold = mtest.hc(gamma=gamma)  # avoid last element division by zero
+            _, self.p_threshold = mtest.hc(gamma=min(gamma,(N-1)/N))  # avoid last element division by zero
             self.objectives = mtest._zz
             self.num_rejected = np.sum(p_values_sorted <= self.p_threshold)
         elif self.work_mode == 'hc':
@@ -111,8 +119,14 @@ class Higher_Criticism:
         elif self.work_mode == 'bonferroni':
             self.objectives = 1 - p_values_sorted
             self.num_rejected = 1
-        else:  # Benjamini Hochberg
+        elif self.work_mode == 'bh':  # Benjamini Hochberg
             self.objectives = - p_values_sorted / np.arange(1,N+1)
+            self.num_rejected = np.argmax(self.objectives) + 1
+        elif 'ks' in self.work_mode:  # Kolmogorov-Smirnov test
+            objective = np.asarray([p_values_sorted - np.arange(N)/N, p_values_sorted - np.arange(1,N+1)/N])
+            if '2' in self.work_mode:
+                objective = np.abs(objective)
+            self.objectives = objective.max(axis=0)
             self.num_rejected = np.argmax(self.objectives) + 1
         if self.num_rejected < 1:
             self.p_threshold = 0
