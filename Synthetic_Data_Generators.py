@@ -10,9 +10,11 @@ class Data_Generator_Base:
         self.N = N
         self.p_values = np.empty(shape=0)
 
-    def generate(self, seed: int) -> None:
-        np.random.seed(seed=seed)
-        self.p_values = np.random.uniform(size=self.N)
+    def generate(self, seeds: list[int]) -> None:
+        self.p_values = np.empty(shape=(len(seeds),self.N))
+        for ind_seed, seed in enumerate(seeds):
+            np.random.seed(seed=seed)
+            self.p_values[ind_seed] = np.random.uniform(size=self.N)
 
     @staticmethod
     def params_pure_noise(N: int) -> dict:
@@ -33,6 +35,7 @@ class Data_Generator_Base:
         fraction = math.pow(N,-beta)
         return Data_Generator_Base.params_from_N_mu_fraction(N=N,mu=mu,fraction=fraction)
 
+
 class Multi_Class_Normal_Population(Data_Generator_Base):
     def __init__(self, sizes: list[int], mus: list[float], sigmas: list[float], sides: int = 1) -> None:
         super().__init__(N = sum(sizes))
@@ -46,16 +49,23 @@ class Multi_Class_Normal_Population(Data_Generator_Base):
         self.std_vector = np.array([self.sigmas[label] for label in self.original_labels], dtype=np.float32)
         self.sides = sides
 
-    def generate(self, seed: int) -> None:
-        np.random.seed(seed=seed)
-        z = np.hstack([np.random.standard_normal(size=size).astype(np.float32) for size in self.sizes])
-        self.generate_from_z(z)
+    def generate(self, seeds: list[int]) -> None:
+        n_array = np.arange(self.N)
+        z = np.empty(shape=(len(seeds), self.N))
+        ind_permute = np.empty_like(z, dtype=n_array.dtype)
+        for ind_seed, seed in enumerate(seeds):
+            np.random.seed(seed=seed)
+            z[ind_seed] = np.hstack([np.random.standard_normal(size=size).astype(np.float32) for size in self.sizes])
+            ind_permute[ind_seed] = np.random.permutation(n_array)
+        self.generate_from_z(z, ind_permute=ind_permute)
 
-    def generate_from_z(self, z: np.ndarray) -> None:
-        ind_premute = np.random.permutation(np.arange(self.N))
+    def generate_from_z(self, z: np.ndarray, ind_permute: np.ndarray = np.empty(shape=0)) -> None:
         values = z * self.std_vector + self.mu_vector
-        self.labels = self.original_labels[ind_premute]
-        self.values = values[ind_premute]
+        self.labels = np.empty_like(ind_permute)
+        self.values = np.empty_like(values)
+        for ind_row, row_permute in enumerate(ind_permute):
+            self.labels[ind_row] = self.original_labels[row_permute]
+            self.values[ind_row] = values[ind_row,row_permute]
         ppf = (self.values - self.mus[0])/self.sigmas[0]
         if self.sides == 1:
             self.p_values = norm.sf(ppf)

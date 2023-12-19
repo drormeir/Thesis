@@ -6,17 +6,24 @@ from Synthetic_Data_Generators import Multi_Class_Normal_Population as Data_Gene
 from Synthetic_Data_Generators import Two_Lists_Tuple, Data_Generator_Base
 from Higher_Criticism import Higher_Criticism
 
-def asymptotic_analysis(N_range: list[int], beta_range: list[float], r_range: list[float], hc_models: list, monte_carlo: int = 1000) -> None:
+def asymptotic_analysis(N_range: list[int], beta_range: list[float], r_range: list[float], hc_models: list,\
+                        monte_carlo: int, chunk_size: int) -> None:
     params_list = Two_Lists_Tuple(list(enumerate(beta_range)), list(enumerate(r_range)))
     collect_results = {}
     many_params = len(params_list) > 1
+    num_models = len(hc_models)
     for ind_N, N in enumerate(N_range):
         print(f'Working on sample size: {N}')
         noise_generator = Data_Generator_Base(N)
-        noise_values = Higher_Criticism.monte_carlo_best_objectives(hc_models=hc_models, data_generator=noise_generator, monte_carlo=monte_carlo, disable_tqdm=many_params)
+        noise_values = Higher_Criticism.monte_carlo_best_objectives(hc_models=hc_models, data_generator=noise_generator,
+                                                                    monte_carlo=monte_carlo, disable_tqdm=many_params,
+                                                                    chunk_size=chunk_size)
+        assert noise_values.shape == (num_models, monte_carlo)
         for (ind_beta, beta), (ind_r, r) in tqdm(params_list, disable= not many_params):
             signal_generator = Data_Generator(**Data_Generator.params_from_N_r_beta(N=N, r=r, beta=beta))
-            hc_monte_carlo = Higher_Criticism.monte_carlo_statistics_HC(hc_models=hc_models, noise_values=noise_values, data_generator=signal_generator, disable_tqdm=many_params)
+            hc_monte_carlo = Higher_Criticism.monte_carlo_statistics_HC(hc_models=hc_models, noise_values=noise_values,
+                                                                        data_generator=signal_generator,
+                                                                        disable_tqdm=many_params, chunk_size=chunk_size)
             for key, auc in hc_monte_carlo.items():
                 if key not in collect_results:
                     collect_results[key] = np.empty(shape=(len(N_range),len(r_range),len(beta_range)), dtype=np.float32)
