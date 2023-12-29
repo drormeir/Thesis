@@ -4,7 +4,7 @@ import numpy as np
 import math
 from tqdm import tqdm
 from scipy.stats import kstest
-from Synthetic_Data_Generators import Data_Generator_Base, signal_2_noise_roc
+from Synthetic_Data_Generators import Data_Generator_Base
 
 class Higher_Criticism:
     def __init__(self, work_mode: str = 'hc', gamma: float = 0.3, global_max: bool = True):
@@ -15,20 +15,9 @@ class Higher_Criticism:
         self.p_threshold = 0
         self.best_objective = 0
         self.global_max = global_max
+        self.i_N = np.empty(shape=0)
+        self.denominator = np.empty(shape=0)
 
-    @staticmethod
-    def monte_carlo_statistics_HC(hc_models: list, noise_values: np.ndarray, data_generator: Data_Generator_Base,
-                                  disable_tqdm: bool, chunk_size: int) -> dict:
-        monte_carlo = noise_values.shape[1]
-        signal_values = Higher_Criticism.monte_carlo_best_objectives(hc_models=hc_models, data_generator=data_generator,\
-                                                                     monte_carlo=monte_carlo, disable_tqdm=disable_tqdm,\
-                                                                     chunk_size=chunk_size)
-        result = {}
-        for ind_model, hc_model in enumerate(hc_models):
-            auc, _, _ = signal_2_noise_roc(signal_values=signal_values[ind_model], noise_values=noise_values[ind_model])
-            result[str(hc_model)] = auc
-        return result
-    
     def __str__(self) -> str:
         if self.work_mode == 'bonferroni':
             return 'Bonferroni'
@@ -83,10 +72,19 @@ class Higher_Criticism:
         for j in tqdm(range(0,monte_carlo,chunk_size), disable=disable_tqdm):
             seeds = list(range(j,min(j+chunk_size,monte_carlo)))
             data_generator.generate(seeds=seeds)
-            p_values = np.sort(data_generator.p_values, axis=1)
             for i, hc_model in enumerate(hc_models):
-                hc_model.run_sorted_p(p_values)
+                hc_model.run_sorted_p(data_generator.p_values)
                 ret[i, np.asarray(seeds, dtype=np.int32)] = hc_model.best_objective
+        return ret
+
+    @staticmethod
+    def best_objectives_from_random_values(hc_models: list, data_generator: Data_Generator_Base,\
+                                           random_values: np.ndarray) -> np.ndarray:
+        ret = np.empty(shape=(len(hc_models),random_values.shape[0]), dtype=np.float32)
+        data_generator.generate_from_random_values(random_values=random_values)
+        for i, hc_model in enumerate(hc_models):
+            hc_model.run_sorted_p(data_generator.p_values)
+            ret[i, :] = hc_model.best_objective
         return ret
 
     def run_unsorted_p(self, p_values_unsorted: np.ndarray) -> None:
@@ -107,24 +105,28 @@ class Higher_Criticism:
                 self.objectives[ind_p_vector] = mtest._zz
             self.num_rejected = np.sum(p_values_sorted <= self.p_threshold, axis=1)
         elif self.work_mode in ['hc', 'unstable']:
-            i_N = np.arange(1,N+1) / N
-            nominator = math.sqrt(N)*(i_N - p_values_sorted)
-            if self.work_mode == 'hc':
-                denominator = np.sqrt(i_N*(1-i_N))
-            else:
-                denominator = np.sqrt(p_values_sorted*(1-p_values_sorted))
-            max_len = int(N*gamma)
+            if self.i_N.size != N:
+                self.i_N = np.arange(1,N+1).reshape(1,-1) / N
+                self.denominator = np.sqrt(self.i_N*(1-self.i_N))
+            nominator = math.sqrt(N)*(self.i_N - p_values_sorted)
+            if self.work_mode == 'unstable':
+                self.denominator = np.sqrt(p_values_sorted*(1-p_values_sorted))
+            with np.errstate(divide='ignore', invalid='ignore'):
+                self.objectives = nominator / self.denominator
+            isfinite = np.isfinite(self.objectives)
             # trimming zeros in denominator
-            zero_denom = denominator <= 1e-8 * np.abs(nominator)
-            if zero_denom.any():
-                max_len = min(zero_denom.argmax(), max_len)  # first zero
-            nominator = nominator[:,:max_len]
-            denominator = denominator[:max_len] if denominator.ndim == 1 else denominator[:,:max_len]            
-            self.objectives = nominator / denominator
+            max_N = int(N*gamma)
+            max_len = np.full(shape=num_p_vectors,fill_value=max_N,dtype=np.int32)
+            for ind_p_vector, ind_zero_denom in enumerate(isfinite.argmin(axis=1)):
+                if isfinite[ind_p_vector,ind_zero_denom]:
+                    continue
+                len_row = min(max_N, ind_zero_denom)
+                max_len[ind_p_vector] = len_row
+                self.objectives[ind_p_vector,len_row:] = 0
             if self.global_max:
-                ind_best = np.argmax(self.objectives, axis=1)
+                ind_best = np.minimum(np.argmax(self.objectives, axis=1), max_len)
             else:
-                ind_best = np.full(fill_value=N - 1, shape=num_p_vectors, dtype=np.int32)
+                ind_best = max_len
                 ind_lowest_objective = np.copy(ind_best)
                 best_beyond = np.zeros_like(ind_best)
                 for ind_objective in self.objectives.argsort(axis=1).T[::-1]:
