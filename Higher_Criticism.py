@@ -36,13 +36,17 @@ class Higher_Criticism:
             ret = 'HC_unstable'
         else:
             ret = 'import_HC'
-        ret += '_'
-        if self.gamma <= 0:
-            ret += f'gammapower_{-self.gamma:.2f}'
-        else:
-            ret += f'gamma_{self.gamma:.2f}'
+        ret += '_' + self.str_gamma()
         ret += f'_{"global" if self.global_max else "local"}_max'
         return ret
+    
+    def str_gamma(self) -> str:
+        return f'gammapower_{-self.gamma:.2f}' if self.gamma <= 0 else f'gamma_{self.gamma:.2f}'
+
+    def str_sub_model_type(self) -> str:
+        stable = 'Unstable' if self.work_mode == 'unstable' else 'Stable'
+        max_type = f'{"Global" if self.global_max else "Local"}_max'
+        return stable + '_' + max_type
     
     def monte_carlo_statistics(self, monte_carlo: int, data_generator: Data_Generator_Base, disable_tqdm: bool = False) -> dict:
         nums_rejected = []
@@ -75,16 +79,6 @@ class Higher_Criticism:
             for i, hc_model in enumerate(hc_models):
                 hc_model.run_sorted_p(data_generator.p_values)
                 ret[i, np.asarray(seeds, dtype=np.int32)] = hc_model.best_objective
-        return ret
-
-    @staticmethod
-    def best_objectives_from_random_values(hc_models: list, data_generator: Data_Generator_Base,\
-                                           random_values: np.ndarray) -> np.ndarray:
-        ret = np.empty(shape=(len(hc_models),random_values.shape[0]), dtype=np.float32)
-        data_generator.generate_from_random_values(random_values=random_values)
-        for i, hc_model in enumerate(hc_models):
-            hc_model.run_sorted_p(data_generator.p_values)
-            ret[i, :] = hc_model.best_objective
         return ret
 
     def run_unsorted_p(self, p_values_unsorted: np.ndarray) -> None:
