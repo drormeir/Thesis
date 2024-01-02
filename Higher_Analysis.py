@@ -122,3 +122,25 @@ def full_analysis_single_size(\
     fig.supxlabel('Beta', y=0.1)
     #fig.tight_layout()
     plt.show()
+
+
+def confusion_matrix_from_random_values(
+        hc_models: list,\
+        signal_generators: Sequence[Data_Generator_Base],\
+        monte_carlo: int = 10000, chunk_size: int = 100) -> np.ndarray:
+    N = signal_generators[0].N
+    num_signal_generators = len(signal_generators)
+    num_models = len(hc_models)
+    confusion_matrices = np.empty(shape=(num_models,num_signal_generators,monte_carlo,4))
+    for seed0 in tqdm(list(range(0,monte_carlo,chunk_size))):
+        seed1 = min(seed0+chunk_size,monte_carlo)
+        seeds = list(range(seed0,seed1))
+        random_values = Data_Generator_Base.generate_random_values(N=N, seeds=seeds)
+        for ind_generator, signal_generator in enumerate(signal_generators):
+            signal_generator.generate_from_random_values(random_values=random_values)
+            for ind_model, hc_model in enumerate(hc_models):
+                hc_model.run_sorted_p(signal_generator.p_values)
+                confusion_matrices[ind_model, ind_generator, seed0:seed1] = signal_generator.calc_confusion(hc_model.num_rejected)
+    return confusion_matrices
+
+

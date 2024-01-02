@@ -7,7 +7,7 @@ from scipy.stats import kstest
 from Synthetic_Data_Generators import Data_Generator_Base
 
 class Higher_Criticism:
-    def __init__(self, work_mode: str = 'hc', gamma: float = 0.3, global_max: bool = True):
+    def __init__(self, work_mode: str = 'hc', alpha: float = -1, gamma: float = 0.3, global_max: bool = True):
         self.work_mode = work_mode.lower()
         assert self.work_mode in ['hc', 'unstable', 'import', 'bonferroni', 'bh', 'ks1', 'ks2']
         self.gamma = gamma
@@ -17,12 +17,13 @@ class Higher_Criticism:
         self.global_max = global_max
         self.i_N = np.empty(shape=0)
         self.denominator = np.empty(shape=0)
+        self.alpha = alpha
 
     def __str__(self) -> str:
         if self.work_mode == 'bonferroni':
-            return 'Bonferroni'
+            return 'Bonferroni' + self.str_alpha(space=' ')
         if self.work_mode == 'bh':
-            return 'Benjamini Hochberg'
+            return 'Benjamini Hochberg' + self.str_alpha(space=' ')
         if 'ks' in self.work_mode:
             ret = 'Kolmogorov-Smirnov '
             if '1' in self.work_mode:
@@ -40,8 +41,11 @@ class Higher_Criticism:
         ret += f'_{"global" if self.global_max else "local"}_max'
         return ret
     
+    def str_alpha(self, space: str ='') -> str:
+        return '' if self.alpha < 0 else space + f'alpha={self.alpha:.2}'
+    
     def str_gamma(self) -> str:
-        return f'gammapower_{-self.gamma:.2f}' if self.gamma <= 0 else f'gamma_{self.gamma:.2f}'
+        return f'gammapower={-self.gamma:.2f}' if self.gamma <= 0 else f'gamma={self.gamma:.2f}'
 
     def str_sub_model_type(self) -> str:
         stable = 'Unstable' if self.work_mode == 'unstable' else 'Stable'
@@ -132,10 +136,23 @@ class Higher_Criticism:
             self.num_rejected = ind_best + 1
         elif self.work_mode == 'bonferroni':
             self.objectives = 1 - p_values_sorted
-            self.num_rejected = np.ones(shape=num_p_vectors, dtype=np.int32)
+            if self.alpha < 0:
+                self.num_rejected = np.ones(shape=num_p_vectors, dtype=np.int32)
+            else:
+                self.num_rejected = np.sum(p_values_sorted <= self.alpha, axis=1)
         elif self.work_mode == 'bh':  # Benjamini Hochberg
             self.objectives = - p_values_sorted / np.arange(1,N+1)
-            self.num_rejected = np.argmax(self.objectives,axis=1) + 1
+            if self.alpha < 0:
+                self.num_rejected = np.argmax(self.objectives,axis=1) + 1
+            else:
+                below_bh_line = p_values_sorted <= np.arange(1,N+1)*self.alpha
+                ind_last_rejected = N - 1 - below_bh_line[:,::-1].argmax(axis=1)
+                for ind_row, ind_last_reject in enumerate(ind_last_rejected):
+                    if below_bh_line[ind_row, ind_last_reject]:
+                        self.num_rejected[ind_row] = ind_last_reject + 1
+                    else:
+                        self.num_rejected[ind_row] = 0
+
         elif 'ks' in self.work_mode:  # Kolmogorov-Smirnov test
             objective = np.asarray([p_values_sorted - np.arange(N)/N, p_values_sorted - np.arange(1,N+1)/N])
             if '2' in self.work_mode:
@@ -145,7 +162,7 @@ class Higher_Criticism:
         for ind_seed, num_rejected in enumerate(self.num_rejected):
             if num_rejected < 1:
                 self.p_threshold[ind_seed] = 0
-                self.best_objective[ind_seed] = self.objectives[0]
+                self.best_objective[ind_seed] = self.objectives[ind_seed, 0]
             else:
                 self.p_threshold[ind_seed] = p_values_sorted[ind_seed,num_rejected-1]
                 self.best_objective[ind_seed] = self.objectives[ind_seed,num_rejected-1]

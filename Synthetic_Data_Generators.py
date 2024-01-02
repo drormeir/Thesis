@@ -11,15 +11,21 @@ class Data_Generator_Base:
     def __init__(self, N: int) -> None:
         self.N = N
         self.p_values = np.empty(shape=0)
-    
+        self.argsort = np.empty(shape=0)
+
     def generate(self, seeds: list[int]) -> None:
         random_values = Data_Generator_Base.generate_random_values(self.N, seeds=seeds)
         self.generate_from_random_values(random_values)
     
     def generate_from_random_values(self, random_values: np.ndarray) -> None:
-        self.p_values = np.sort(self.generate_p_values_from_random_values(random_values), axis=1)
+        p_values = self.generate_p_values_from_random_values(random_values)
+        self.argsort = p_values.argsort(axis=1)
+        self.p_values = np.sort(p_values, axis=1)
 
     def generate_p_values_from_random_values(self, random_values: np.ndarray) -> np.ndarray:
+        return np.empty(shape=0)
+
+    def calc_confusion(self, num_rejected: np.ndarray) -> np.ndarray:
         return np.empty(shape=0)
 
     @staticmethod
@@ -94,6 +100,18 @@ class Multi_Class_Normal_Population(Data_Generator_Base):
             z = norm.ppf(random_values) * self.std_vector0 + self.mu_vector0
             p_values = norm.sf(np.abs(z)) * 2
         return p_values
+
+    def calc_confusion(self, num_rejected: np.ndarray) -> np.ndarray:
+        N = np.sum(self.sizes)
+        result = np.empty(shape=(num_rejected.size,4), dtype=np.int32)
+        for ind_row, num_reject in enumerate(num_rejected.reshape(-1)):
+            labels = self.original_labels[self.argsort[ind_row]]
+            true_positive = np.sum(labels[:num_reject] == 1)
+            false_positive = num_reject - true_positive
+            true_negative = np.sum(labels[num_reject:] == 0)
+            false_negative = N - num_reject - true_negative
+            result[ind_row][:] = [true_positive, false_positive, true_negative, false_negative]
+        return result
 
 class Multi_Class_Normal_Population_Uniform(Multi_Class_Normal_Population):
     def generate(self, seed: int) -> None:
