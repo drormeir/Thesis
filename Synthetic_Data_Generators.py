@@ -27,26 +27,7 @@ class Data_Generator_Base:
 
     def calc_confusion(self, num_rejected: np.ndarray) -> np.ndarray:
         return np.empty(shape=0)
-
-    @staticmethod
-    def params_pure_noise(N: int) -> dict:
-        return {'sizes': [N], 'mus': [0.], 'sigmas': [1.]}
     
-    @staticmethod
-    def params_from_N_mu_fraction(N: int, mu: float, fraction: float) -> dict:
-        n = min(int(0.5+N*fraction),N)
-        if fraction >= 1e-9:
-            n = max(n,1)
-        if fraction <= 1-1e-9:
-            n = min(n, N-1)
-        return {'sizes': [N-n, n], 'mus': [0., mu], 'sigmas': [1.,1.]}
-
-    @staticmethod
-    def params_from_N_r_beta(N: int, r: float, beta: float) -> dict:
-        mu = math.sqrt(2*r*math.log(N))
-        fraction = math.pow(N,-beta)
-        return Data_Generator_Base.params_from_N_mu_fraction(N=N,mu=mu,fraction=fraction)
-
     @staticmethod
     def generate_noise_p_values_parallel_row(ind_seed: int, seed: int, N: int, p_values: np.ndarray) -> None:
         p_values[ind_seed] = np.random.default_rng(seed).random(size=N)
@@ -90,6 +71,37 @@ class Multi_Class_Normal_Population(Data_Generator_Base):
             self.mu_vector0 = self.mu_vector0[N0:]
             self.std_vector0 = self.std_vector0[N0:]
         self.sides = sides
+
+    @staticmethod
+    def params_pure_noise(N: int) -> dict:
+        return {'sizes': [N], 'mus': [0.], 'sigmas': [1.]}
+    
+    @staticmethod
+    def params_from_N_mu_fraction(N: int, mu: float, fraction: float, sides: int = 1) -> dict:
+        n = min(int(0.5+N*fraction),N)
+        if fraction >= 1e-9:
+            n = max(n,1)
+        if fraction <= 1-1e-9:
+            n = min(n, N-1)
+        return {'sizes': [N-n, n], 'mus': [0., mu], 'sigmas': [1.,1.], 'sides': sides}
+
+    @staticmethod
+    def params_from_N_r_beta(N: int, r: float, beta: float) -> dict:
+        mu = math.sqrt(2*r*math.log(N))
+        fraction = math.pow(N,-beta)
+        return Multi_Class_Normal_Population.params_from_N_mu_fraction(N=N,mu=mu,fraction=fraction)
+
+
+    @staticmethod
+    def params_from_donoho_N_epsilon_tau(N: int, epsilon: float, tau: float) -> dict:
+        # tau = sqrt(N)*mu
+        mu = tau  # /math.sqrt(N)
+        return Multi_Class_Normal_Population.params_from_N_mu_fraction(N=N,mu=mu,fraction=epsilon,sides=2)
+
+    @staticmethod
+    def params_dicts_from_list_donoho_N_epsilon_tau(N_range: list[int], epsilon_range: list[float], tau_range: list[float]) -> list[dict]:
+        params_tuples = list(itertools.product(N_range,epsilon_range,tau_range))
+        return [Multi_Class_Normal_Population.params_from_donoho_N_epsilon_tau(*params) for params in params_tuples]
 
     def generate_p_values_from_random_values(self, random_values: np.ndarray) -> np.ndarray:
         if self.sides == 1:

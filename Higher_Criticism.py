@@ -37,10 +37,13 @@ class Higher_Criticism:
             ret = 'HC_unstable'
         else:
             ret = 'import_HC'
-        ret += '_' + self.str_gamma()
-        ret += f'_{"global" if self.global_max else "local"}_max'
+        ret += ' ' + self.str_gamma()
+        ret += ' ' + self.str_max_mode()
         return ret
     
+    def str_max_mode(self) -> str:
+        return f'{"global" if self.global_max else "local"} max'
+
     def str_alpha(self, space: str ='') -> str:
         return '' if self.alpha < 0 else space + f'alpha={self.alpha:.2}'
     
@@ -89,12 +92,15 @@ class Higher_Criticism:
         self.run_sorted_p(np.sort(p_values_unsorted))
 
     def run_sorted_p(self, p_values_sorted: np.ndarray) -> None:
-        num_p_vectors, N = p_values_sorted.shape
+        num_p_vectors, N = p_values_sorted.shape        
         gamma = N**(-self.gamma-1.0) if self.gamma <= 0 else self.gamma
         self.p_threshold = np.zeros(shape=num_p_vectors, dtype=float)
         self.best_objective = np.zeros_like(self.p_threshold)
         self.num_rejected = np.zeros(shape=num_p_vectors, dtype=np.int32)
         self.objectives = np.empty_like(p_values_sorted)
+        if self.i_N.size != N:
+            self.i_N = np.arange(1,N+1).reshape(1,-1) / N
+
         if self.work_mode == 'import':
             gamma = min(gamma,(N-1)/N)  # avoid last element division by zero
             for ind_p_vector, p_vector in enumerate(p_values_sorted):
@@ -104,7 +110,6 @@ class Higher_Criticism:
             self.num_rejected = np.sum(p_values_sorted <= self.p_threshold, axis=1)
         elif self.work_mode in ['hc', 'unstable']:
             if self.i_N.size != N:
-                self.i_N = np.arange(1,N+1).reshape(1,-1) / N
                 self.denominator = np.sqrt(self.i_N*(1-self.i_N))
             nominator = math.sqrt(N)*(self.i_N - p_values_sorted)
             if self.work_mode == 'unstable':
@@ -141,11 +146,11 @@ class Higher_Criticism:
             else:
                 self.num_rejected = np.sum(p_values_sorted <= self.alpha, axis=1)
         elif self.work_mode == 'bh':  # Benjamini Hochberg
-            self.objectives = - p_values_sorted / np.arange(1,N+1)
+            self.objectives = - p_values_sorted / self.i_N
             if self.alpha < 0:
                 self.num_rejected = np.argmax(self.objectives,axis=1) + 1
             else:
-                below_bh_line = p_values_sorted <= np.arange(1,N+1)*self.alpha
+                below_bh_line = p_values_sorted <= self.i_N*self.alpha
                 ind_last_rejected = N - 1 - below_bh_line[:,::-1].argmax(axis=1)
                 for ind_row, ind_last_reject in enumerate(ind_last_rejected):
                     if below_bh_line[ind_row, ind_last_reject]:
@@ -154,7 +159,7 @@ class Higher_Criticism:
                         self.num_rejected[ind_row] = 0
 
         elif 'ks' in self.work_mode:  # Kolmogorov-Smirnov test
-            objective = np.asarray([p_values_sorted - np.arange(N)/N, p_values_sorted - np.arange(1,N+1)/N])
+            objective = np.asarray([p_values_sorted - np.arange(N)/N, p_values_sorted - self.i_N])
             if '2' in self.work_mode:
                 objective = np.abs(objective)
             self.objectives = objective.max(axis=0)

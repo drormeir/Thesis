@@ -5,7 +5,7 @@ import numpy as np
 from Synthetic_Data_Generators import Multi_Class_Normal_Population as Data_Generator
 from Synthetic_Data_Generators import Two_Lists_Tuple, Data_Generator_Noise, Data_Generator_Base, signal_2_noise_roc
 from Higher_Criticism import Higher_Criticism
-from typing import Sequence
+from typing import Any, Sequence
 
 def AUC_best_objectives_from_random_values(
         hc_models: list,\
@@ -124,23 +124,59 @@ def full_analysis_single_size(\
     plt.show()
 
 
-def confusion_matrix_from_random_values(
+class Monte_carlo_Confusion_Matrices:
+    def __init__(self,
         hc_models: list,\
         signal_generators: Sequence[Data_Generator_Base],\
-        monte_carlo: int = 10000, chunk_size: int = 100) -> np.ndarray:
-    N = signal_generators[0].N
-    num_signal_generators = len(signal_generators)
-    num_models = len(hc_models)
-    confusion_matrices = np.empty(shape=(num_models,num_signal_generators,monte_carlo,4))
-    for seed0 in tqdm(list(range(0,monte_carlo,chunk_size))):
-        seed1 = min(seed0+chunk_size,monte_carlo)
-        seeds = list(range(seed0,seed1))
-        random_values = Data_Generator_Base.generate_random_values(N=N, seeds=seeds)
-        for ind_generator, signal_generator in enumerate(signal_generators):
-            signal_generator.generate_from_random_values(random_values=random_values)
-            for ind_model, hc_model in enumerate(hc_models):
-                hc_model.run_sorted_p(signal_generator.p_values)
-                confusion_matrices[ind_model, ind_generator, seed0:seed1] = signal_generator.calc_confusion(hc_model.num_rejected)
-    return confusion_matrices
+        monte_carlo: int = 10000, chunk_size: int = 100) -> None:
+        N = signal_generators[0].N
+        num_signal_generators = len(signal_generators)
+        num_models = len(hc_models)
+        self.confusion_matrices = np.empty(shape=(num_models,num_signal_generators,monte_carlo,4))
+        for seed0 in tqdm(list(range(0,monte_carlo,chunk_size))):
+            seed1 = min(seed0+chunk_size,monte_carlo)
+            seeds = list(range(seed0,seed1))
+            random_values = Data_Generator_Base.generate_random_values(N=N, seeds=seeds)
+            for ind_generator, signal_generator in enumerate(signal_generators):
+                signal_generator.generate_from_random_values(random_values=random_values)
+                for ind_model, hc_model in enumerate(hc_models):
+                    hc_model.run_sorted_p(signal_generator.p_values)
+                    self.confusion_matrices[ind_model, ind_generator, seed0:seed1] = signal_generator.calc_confusion(hc_model.num_rejected)
+        
+    def apply_func(self, func) -> np.ndarray:
+        num_models, num_signal_generators = self.confusion_matrices.shape[:2]
+        ret = np.empty(shape=(num_models, num_signal_generators))
+        for ind_model, conf_matrices_per_model in enumerate(self.confusion_matrices):
+            for ind_generator, monte_carlo_conf_matrices in enumerate(conf_matrices_per_model):
+                true_positive = monte_carlo_conf_matrices[:,0]
+                false_positive = monte_carlo_conf_matrices[:,1]
+                true_negative = monte_carlo_conf_matrices[:,2]
+                false_negative = monte_carlo_conf_matrices[:,3]
+                ret[ind_model, ind_generator] = func(true_positive, false_positive, true_negative, false_negative)
+        return ret
 
+    def apply_mean_false_disovery_rate(self) -> np.ndarray:
+        def mean_fdr(true_positive, false_positive, true_negative, false_negative) -> float:
+            num_rejected = false_positive + true_positive
+            with np.errstate(divide='ignore', invalid='ignore'):
+                fdr_all = false_positive/num_rejected
+            fdr_all[~ np.isfinite(fdr_all)] = 1
+            return np.mean(fdr_all)
+        return self.apply_func(mean_fdr)
+
+    def apply_mean_misdetection_rate(self) -> np.ndarray:
+        def mean_mdr(true_positive, false_positive, true_negative, false_negative) -> float:
+            original_signal_count = false_negative + true_positive
+            with np.errstate(divide='ignore', invalid='ignore'):
+                mdr_all = false_negative/original_signal_count
+            mdr_all[~ np.isfinite(mdr_all)] = 1
+            return np.mean(mdr_all)
+        return self.apply_func(mean_mdr)
+    
+    def apply_mean_sqrt_misclassification_rate(self) -> np.ndarray:
+        def mean_mdr(true_positive, false_positive, true_negative, false_negative) -> float:
+            N = true_positive+false_positive+true_negative+false_negative
+            mcr_all = (false_negative+false_positive)/N
+            return mcr_all.mean()**0.5
+        return self.apply_func(mean_mdr)
 
