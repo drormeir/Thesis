@@ -173,7 +173,7 @@ class Monte_carlo_Confusion_Matrices:
             return np.mean(mdr_all)
         return self.apply_func(mean_mdr)
     
-    def apply_mean_sqrt_misclassification_rate(self) -> np.ndarray:
+    def apply_sqrt_mean_misclassification_rate(self) -> np.ndarray:
         def mean_mdr(true_positive, false_positive, true_negative, false_negative) -> float:
             N = true_positive+false_positive+true_negative+false_negative
             mcr_all = (false_negative+false_positive)/N

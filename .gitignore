@@ -398,3 +398,6 @@ FodyWeavers.xsd
 *.sln.iml
 .vscode/settings.json
 .idea/
+
+# Adobe Acrobat Read
+desktop.ini

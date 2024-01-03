@@ -109,7 +109,7 @@ class Higher_Criticism:
                 self.objectives[ind_p_vector] = mtest._zz
             self.num_rejected = np.sum(p_values_sorted <= self.p_threshold, axis=1)
         elif self.work_mode in ['hc', 'unstable']:
-            if self.i_N.size != N:
+            if self.denominator.shape != self.i_N.shape:
                 self.denominator = np.sqrt(self.i_N*(1-self.i_N))
             nominator = math.sqrt(N)*(self.i_N - p_values_sorted)
             if self.work_mode == 'unstable':
@@ -144,7 +144,7 @@ class Higher_Criticism:
             if self.alpha < 0:
                 self.num_rejected = np.ones(shape=num_p_vectors, dtype=np.int32)
             else:
-                self.num_rejected = np.sum(p_values_sorted <= self.alpha, axis=1)
+                self.num_rejected = np.sum(p_values_sorted <= self.alpha/N, axis=1)
         elif self.work_mode == 'bh':  # Benjamini Hochberg
             self.objectives = - p_values_sorted / self.i_N
             if self.alpha < 0:
