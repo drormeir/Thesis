@@ -93,15 +93,9 @@ class Multi_Class_Normal_Population(Data_Generator_Base):
 
 
     @staticmethod
-    def params_from_donoho_N_epsilon_tau(N: int, epsilon: float, tau: float) -> dict:
-        # tau = sqrt(N)*mu
-        mu = tau  # /math.sqrt(N)
-        return Multi_Class_Normal_Population.params_from_N_mu_fraction(N=N,mu=mu,fraction=epsilon,sides=2)
-
-    @staticmethod
-    def params_dicts_from_list_donoho_N_epsilon_tau(N_range: list[int], epsilon_range: list[float], tau_range: list[float]) -> list[dict]:
-        params_tuples = list(itertools.product(N_range,epsilon_range,tau_range))
-        return [Multi_Class_Normal_Population.params_from_donoho_N_epsilon_tau(*params) for params in params_tuples]
+    def params_dicts_from_lists_N_mu_fraction(N_range: list[int], mu_range: list[float], fraction_range: list[float]) -> list[dict]:
+        params_tuples = list(itertools.product(N_range,mu_range,fraction_range))
+        return [Multi_Class_Normal_Population.params_from_N_mu_fraction(*params,sides=2) for params in params_tuples]
 
     def generate_p_values_from_random_values(self, random_values: np.ndarray) -> np.ndarray:
         if self.sides == 1:
