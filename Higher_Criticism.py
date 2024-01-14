@@ -19,6 +19,10 @@ class Base_Rejection_Method:
     def full_name(self):
         return self.name + ' ' + self.str_param if self.str_param else self.name
 
+    def calc_i_N(self, N: int):
+        if self.i_N.size != N:
+            self.i_N = np.arange(1,N+1).reshape(1,-1) / N
+        
     def run_unsorted_p(self, p_values_unsorted: np.ndarray) -> None:
         self.run_sorted_p(np.sort(p_values_unsorted))
 
@@ -28,9 +32,7 @@ class Base_Rejection_Method:
         self.best_objective = np.zeros_like(self.p_threshold)
         self.num_rejected = np.zeros(shape=num_p_vectors, dtype=np.int32)
         self.objectives = np.empty_like(p_values_sorted)
-        if self.i_N.size != N:
-            self.i_N = np.arange(1,N+1).reshape(1,-1) / N
-
+        self.calc_i_N(N)
         self.work_sorted_p(p_values_sorted)
 
         for ind_seed, num_rejected in enumerate(self.num_rejected):
@@ -121,22 +123,20 @@ class Higher_Criticism(Base_Rejection_Method):
         self.global_max = global_max
         self.denominator = np.empty(shape=0)
     
-    def monte_carlo_statistics(self, monte_carlo: int, data_generator: Data_Generator_Base, disable_tqdm: bool = False) -> dict:
+    def monte_carlo_statistics(self, monte_carlo: int, data_generator: Data_Generator_Base, chunk_size: int = 100, disable_tqdm: bool = False) -> dict:
         nums_rejected = []
         best_objectives = []
         first_p_value = []
         lowest_angle = []
-        N = data_generator.N
-        angle_x_axis = np.arange(1,N+1)
-        for i in tqdm(range(monte_carlo), disable=disable_tqdm):
-            data_generator.generate(seeds=[i])
-            p_values = np.sort(data_generator.p_values)
+        for i in tqdm(range(0,monte_carlo,chunk_size), disable=disable_tqdm):
+            data_generator.generate(seeds=list(range(i,min(i+chunk_size,monte_carlo))))
+            p_values = np.sort(data_generator.p_values, axis=1)
             self.run_sorted_p(p_values)
             # collecting data from objective function
-            best_objectives.append(self.best_objective)
-            nums_rejected.append(self.num_rejected)
-            first_p_value.append(p_values[0])
-            lowest_angle.append((p_values/angle_x_axis).min())
+            best_objectives += list(self.best_objective.reshape(-1))
+            nums_rejected += list(self.num_rejected.reshape(-1))
+            first_p_value += list(p_values[:,0].reshape(-1))
+            lowest_angle += list(np.min(p_values/self.i_N, axis=1))
         return {'nums_rejected' : nums_rejected,
                 'best_objectives':best_objectives,
                 'first_p_value': first_p_value,
