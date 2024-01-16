@@ -5,7 +5,7 @@ import numpy as np
 
 from Synthetic_Data_Generators import Multi_Class_Normal_Population as Data_Generator
 from Synthetic_Data_Generators import Two_Lists_Tuple, Data_Generator_Noise, Data_Generator_Base, signal_2_noise_roc
-from Higher_Criticism import Higher_Criticism
+from Higher_Criticism import *
 from typing import Any, Sequence
 
 def AUC_best_objectives_from_random_values(
@@ -43,7 +43,7 @@ def AUC_asymptotic_analysis_multi_size(\
         monte_carlo: int = 10000, chunk_size: int = 100) -> None:
     params_list = [(ind_beta,beta,ind_r,r) for ind_beta, beta in enumerate(beta_range) for ind_r, r in enumerate(r_range)]
     model_result_shape = (len(N_range),len(r_range),len(beta_range))
-    collect_results = {model.full_name(): np.empty(shape=model_result_shape, dtype=np.float32) for model in hc_models}
+    collect_results = {model.full_name: np.empty(shape=model_result_shape, dtype=np.float32) for model in hc_models}
 
     for ind_N, N in enumerate(N_range):
         print(f'Working on sample size: {N}')
@@ -55,7 +55,7 @@ def AUC_asymptotic_analysis_multi_size(\
         for ind_model, hc_model in enumerate(hc_models):
             for ind_param, param in enumerate(params_list):
                 ind_beta, beta, ind_r, r = param
-                collect_results[hc_model.full_name()][ind_N, ind_r, ind_beta] = auc_results[ind_model][ind_param]
+                collect_results[hc_model.full_name][ind_N, ind_r, ind_beta] = auc_results[ind_model][ind_param]
 
     for ind_beta, beta, ind_r, r in params_list:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
@@ -89,6 +89,7 @@ def AUC_full_analysis_single_size(\
     assert 1 <= global_max_flags <= 3
     params_list = Two_Lists_Tuple(r_range, beta_range)
     signal_generators = [Data_Generator(**Data_Generator.params_from_N_r_beta(N=N, r=r, beta=beta)) for r, beta in params_list]
+    # hc_models = [Bonferroni(alpha=-1), Benjamini_Hochberg(alpha=-1),]
     hc_models = []
     num_major_models = 0
     if (stables_flags & 1) and (global_max_flags & 1):
@@ -116,7 +117,6 @@ def AUC_full_analysis_single_size(\
     x_tick_labels = [f'{beta:.2f}' for beta in beta_range]
     y_ticks = np.linspace(0.5, num_r-0.5, num=num_r)
     y_tick_labels = [f'{r:.2f}' for r in r_range]
-    # https://matplotlib.org/stable/gallery/subplots_axes_and_figures/figure_title.html
     fig, axs = plt.subplots(figsize=(num_major_models*4, 5*num_gamma),
                             nrows=num_gamma, ncols=num_major_models, sharex=False, sharey=True)
     ind_param_ind_model = list(enumerate(auc_results.argmax(axis=0)))
@@ -135,7 +135,7 @@ def AUC_full_analysis_single_size(\
         ax.set_xticks(x_ticks)
         ax.set_xticklabels(x_tick_labels)
         if col == 0:
-            ax.set_ylabel(hc_model.str_param + '\n\nr')
+            ax.set_ylabel(hc_model.str_gamma + '\n\nr')
             ax.set_yticks(y_ticks)
             ax.set_yticklabels(y_tick_labels)
         is_best_r_beta = np.zeros_like(auc_model, dtype=bool)
@@ -212,8 +212,7 @@ class Monte_carlo_Confusion_Matrices:
     
     def apply_sqrt_mean_misclassification_rate(self) -> np.ndarray:
         def mean_mdr(true_positive, false_positive, true_negative, false_negative) -> float:
-            N = true_positive+false_positive+true_negative+false_negative
-            mcr_all = (false_negative+false_positive)/N
+            mcr_all = true_positive == 0
             return mcr_all.mean()**0.5
         return self.apply_func(mean_mdr)
 
