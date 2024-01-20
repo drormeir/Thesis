@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import math
 from tqdm import tqdm
-from scipy.stats import kstest
+from scipy.stats import beta
 from Synthetic_Data_Generators import Data_Generator_Base
 
 class Base_Rejection_Method:
@@ -14,21 +14,28 @@ class Base_Rejection_Method:
         self.N_gamma = 0
         if gamma is None:
             self.str_gamma = ''
+            self.is_power = False
         elif gamma > 0:
             assert gamma <= 1
             self.str_gamma = f'gamma={gamma:.2f}'
+            self.is_power = False
         else:
             assert gamma >= -1
             self.str_gamma = f'gammaPower={-gamma:.2f}'
+            self.is_power = True
         self.num_rejected = np.empty(shape=0, dtype=np.int32)
         self.best_objective = np.empty(shape=0, dtype=float)
         self.p_threshold = np.empty(shape=0, dtype=float)
         self.i_N = np.empty(shape=0, dtype=float)
-        self.full_name = name
+        self.full_name_param = name
+        if self.str_param:
+            self.full_name_param += ' ' + self.str_param
+        self.full_name = self.full_name_param
         if self.str_gamma:
             self.full_name += ' ' + self.str_gamma
-        if self.str_param:
-            self.full_name += ' ' + self.str_param
+
+    def clone_with_gamma(self, gamma: float):
+        return Base_Rejection_Method(name=self.name, gamma=gamma, str_param=self.str_param)
 
     def calc_i_N(self, N: int):
         if self.i_N.size == N:
@@ -41,6 +48,12 @@ class Base_Rejection_Method:
         else:
             self.N_gamma = int(N**-self.gamma + 0.5)
         
+    def effective_gamma(self) -> float:
+        N = self.i_N.size
+        assert N > 0
+        gamma = min((self.N_gamma+1e-3)/N,1.0)
+        return gamma
+
     def run_unsorted_p(self, p_values_unsorted: np.ndarray) -> None:
         self.run_sorted_p(np.sort(p_values_unsorted))
 
@@ -63,33 +76,43 @@ class Base_Rejection_Method:
 
     def work_sorted_p(self, p_values_sorted: np.ndarray) -> None:
         assert 0
-
+    
 class Bonferroni(Base_Rejection_Method):
-    def __init__(self, alpha: float = 1, gamma: float|None = None):
-        super().__init__(name='Bonferroni', str_param='' if alpha <= 0 else f'alpha={alpha:.2f}', gamma=gamma)
+    def __init__(self, alpha: float|None = 1, gamma: float|None = None):
+        super().__init__(name='Bonferroni', str_param='' if alpha is None else f'alpha={alpha:.2f}', gamma=gamma)
         self.alpha = alpha
 
+    def clone_with_gamma(self, gamma: float):
+        return Bonferroni(alpha = self.alpha, gamma=gamma)
+
     def work_sorted_p(self, p_values_sorted: np.ndarray) -> None:
-        _, N = p_values_sorted.shape
-        self.objectives = 1 - p_values_sorted
-        if self.alpha <= 0:
+        N = p_values_sorted.shape[1]
+        if self.alpha is None:
+            self.objectives = 1 - p_values_sorted
             self.num_rejected.fill(1)
         else:
-            self.num_rejected = np.sum(p_values_sorted[:,:self.N_gamma] <= self.alpha/N, axis=1)
-
+            self.objectives = self.alpha/N - p_values_sorted
+            self.num_rejected = np.sum(self.objectives[:,:self.N_gamma] >= 0, axis=1)
+        for ind_row in range(self.objectives.shape[0]):
+            for i in range(1,self.num_rejected[ind_row]):
+                self.objectives[ind_row,i] = self.objectives[ind_row,i-1:i+1].max()
 
 class Benjamini_Hochberg(Base_Rejection_Method):
-    def __init__(self, alpha: float = 1, gamma: float|None = None):
+    def __init__(self, alpha: float|None, gamma: float|None = None):
         super().__init__(name='Benjamini-Hochberg', gamma=gamma,
-                         str_param='lowest angle' if alpha <= 0 else f'alpha={alpha:.2f}')
+                         str_param='lowest angle' if alpha is None else f'alpha={alpha:.2f}')
         self.alpha = alpha
 
+    def clone_with_gamma(self, gamma: float):
+        return Benjamini_Hochberg(alpha = self.alpha, gamma=gamma)
+    
     def work_sorted_p(self, p_values_sorted: np.ndarray) -> None:
-        self.objectives = - p_values_sorted / self.i_N
-        if self.alpha <= 0:
+        if self.alpha is None:
+            self.objectives = - p_values_sorted / self.i_N
             self.num_rejected = np.argmax(self.objectives[:,:self.N_gamma],axis=1) + 1
             return
-        below_bh_line = p_values_sorted[:,:self.N_gamma] <= self.i_N[:,:self.N_gamma]*self.alpha
+        self.objectives = self.i_N*self.alpha - p_values_sorted
+        below_bh_line = self.objectives >= 0
         last_ind = self.N_gamma - 1
         ind_last_rejected = last_ind - below_bh_line[:,::-1].argmax(axis=1)
         for ind_row, ind_last_reject in enumerate(ind_last_rejected):
@@ -97,6 +120,9 @@ class Benjamini_Hochberg(Base_Rejection_Method):
                 self.num_rejected[ind_row] = ind_last_reject + 1
             else:
                 self.num_rejected[ind_row] = 0
+        for ind_row in range(self.objectives.shape[0]):
+            for i in range(1,self.num_rejected[ind_row]):
+                self.objectives[ind_row,i] = self.objectives[ind_row,i-1:i+1].max()
 
 
 class Kolmogorov_Smirnov(Base_Rejection_Method):  # Kolmogorov-Smirnov test
@@ -105,6 +131,9 @@ class Kolmogorov_Smirnov(Base_Rejection_Method):  # Kolmogorov-Smirnov test
         self.mode = mode
         self.i_N0 = np.empty(shape=0)
 
+    def clone_with_gamma(self, gamma: float):
+        return Kolmogorov_Smirnov(mode = self.mode, gamma=gamma)
+    
     def work_sorted_p(self, p_values_sorted: np.ndarray) -> None:
         _, N = p_values_sorted.shape
         if self.i_N0.size != N:
@@ -123,9 +152,11 @@ class Import_HC(Base_Rejection_Method):
                          gamma=gamma)
         self.stable = stable
 
+    def clone_with_gamma(self, gamma: float):
+        return Import_HC(stable=self.stable, gamma=gamma)
+    
     def work_sorted_p(self, p_values_sorted: np.ndarray) -> None:
-        _, N = p_values_sorted.shape
-        gamma = min(self.N_gamma/N+1e-6,1.0)
+        gamma = self.effective_gamma()
         for ind_p_vector, p_vector in enumerate(p_values_sorted):
             mtest = MultiTest(p_vector, stbl=self.stable)
             _, self.p_threshold[ind_p_vector] = mtest.hc(gamma=gamma)
@@ -140,6 +171,9 @@ class Higher_Criticism(Base_Rejection_Method):
         self.stable = stable
         self.global_max = global_max
         self.denominator = np.empty(shape=0)
+    
+    def clone_with_gamma(self, gamma: float):
+        return Higher_Criticism(stable=self.stable, global_max=self.global_max, gamma=gamma)
     
     def monte_carlo_statistics(self, monte_carlo: int, data_generator: Data_Generator_Base,\
                                chunk_size: int = 100, disable_tqdm: bool = False) -> dict:
@@ -223,3 +257,16 @@ class Higher_Criticism(Base_Rejection_Method):
         plt.legend()
         plt.show()
 
+class Berk_Jones(Base_Rejection_Method):
+    def __init__(self, gamma: float | None = None) -> None:
+        super().__init__(name='Berk Jones', gamma=gamma)
+        return
+
+    def clone_with_gamma(self, gamma: float):
+        return Berk_Jones(gamma=gamma)
+
+    def work_sorted_p(self, p_values_sorted: np.ndarray) -> None:
+        _, N = p_values_sorted.shape
+        ii = np.arange(1,N+1)
+        self.objectives = beta.sf(p_values_sorted, ii, N - ii + 1)
+        self.num_rejected = np.argmax(self.objectives[:,:self.N_gamma], axis=1) + 1

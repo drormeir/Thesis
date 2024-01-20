@@ -44,6 +44,16 @@ def AUC_asymptotic_analysis_multi_size(\
     params_list = [(ind_beta,beta,ind_r,r) for ind_beta, beta in enumerate(beta_range) for ind_r, r in enumerate(r_range)]
     model_result_shape = (len(N_range),len(r_range),len(beta_range))
     collect_results = {model.full_name: np.empty(shape=model_result_shape, dtype=np.float32) for model in hc_models}
+    line_params_per_model = {}
+    for model in hc_models:
+        # dictionary type hinting to avoid warnings
+        line_params: dict[str, int | str] = {}
+        if isinstance(model, (Higher_Criticism, Import_HC)):
+            line_params['linestyle'] = 'dashed' if model.is_power else 'solid'
+        else:
+            line_params['linestyle'] = 'dotted'
+            line_params['linewidth'] = 3
+        line_params_per_model[model.full_name] = line_params
 
     for ind_N, N in enumerate(N_range):
         print(f'Working on sample size: {N}')
@@ -62,14 +72,7 @@ def AUC_asymptotic_analysis_multi_size(\
         max_auc = 0
         for key in collect_results:
             auc = collect_results[key][:, ind_r, ind_beta].reshape(-1)
-            # dictionary type hinting to avoid warnings
-            line_params: dict[str, int | str] = {}
-            key_lower = key.lower()
-            if 'hc' in key_lower:
-                line_params['linestyle'] = 'dashed' if 'power' in key_lower else 'solid'
-            else:
-                line_params['linestyle'] = 'dotted'
-                line_params['linewidth'] = 3
+            line_params = line_params_per_model[key]
             ax.plot(N_range, auc, label=key, **line_params)
             max_auc = max(max_auc, auc.max())
         if max_auc >= 0.9:
@@ -83,27 +86,15 @@ def AUC_asymptotic_analysis_multi_size(\
 def AUC_full_analysis_single_size(\
         N: int, beta_range: list[float], r_range: list[float],\
         gamma_range: list[float],\
+        major_models: Sequence[Base_Rejection_Method],\
         stables_flags: int = 3, global_max_flags: int = 3,\
         monte_carlo: int = 10000, chunk_size: int = 100) -> None:
     assert 1 <= stables_flags <= 3
     assert 1 <= global_max_flags <= 3
     params_list = Two_Lists_Tuple(r_range, beta_range)
     signal_generators = [Data_Generator(**Data_Generator.params_from_N_r_beta(N=N, r=r, beta=beta)) for r, beta in params_list]
-    # hc_models = [Bonferroni(alpha=-1), Benjamini_Hochberg(alpha=-1),]
-    hc_models = []
-    num_major_models = 0
-    if (stables_flags & 1) and (global_max_flags & 1):
-        num_major_models += 1
-        hc_models += [Higher_Criticism(stable=True, global_max=True, gamma=gamma) for gamma in gamma_range]
-    if (stables_flags & 2) and (global_max_flags & 1):
-        num_major_models += 1
-        hc_models += [Higher_Criticism(stable=False, global_max=True, gamma=gamma) for gamma in gamma_range]
-    if (stables_flags & 1) and (global_max_flags & 2):
-        num_major_models += 1
-        hc_models += [Higher_Criticism(stable=True, global_max=False, gamma=gamma) for gamma in gamma_range]
-    if (stables_flags & 2) and (global_max_flags & 2):
-        num_major_models += 1
-        hc_models += [Higher_Criticism(stable=False, global_max=False, gamma=gamma) for gamma in gamma_range]
+    num_major_models = len(major_models)
+    hc_models = [major_model.clone_with_gamma(gamma=gamma) for major_model in major_models for gamma in gamma_range]
     auc_results = AUC_best_objectives_from_random_values(\
         hc_models=hc_models, signal_generators=signal_generators,\
         monte_carlo=monte_carlo, chunk_size=chunk_size)
@@ -119,18 +110,16 @@ def AUC_full_analysis_single_size(\
     y_tick_labels = [f'{r:.2f}' for r in r_range]
     fig, axs = plt.subplots(figsize=(num_major_models*4, 5*num_gamma),
                             nrows=num_gamma, ncols=num_major_models, sharex=False, sharey=True)
-    ind_param_ind_model = list(enumerate(auc_results.argmax(axis=0)))
-    ind_params_best_per_model = [[]] * len(hc_models)
-    for ind_model, ind_params_best in enumerate(ind_params_best_per_model):
-        for ind_param_best in [ind_param for ind_param, ind_m in ind_param_ind_model if ind_m == ind_model]:
-            ind_r_best, ind_beta_best = ind_param_best // num_beta, ind_param_best % num_beta
-            ind_params_best.append((ind_r_best,ind_beta_best))
+    ind_params_best_per_model = [[] for _ in range(len(hc_models))]  # for _ in... --> different instances of list
+    for ind_param_best, ind_model in enumerate(auc_results.argmax(axis=0)):
+        ind_r_best, ind_beta_best = ind_param_best // num_beta, ind_param_best % num_beta
+        ind_params_best_per_model[ind_model].append((ind_r_best,ind_beta_best))
     for ind_model, hc_model in enumerate(hc_models):
         auc_model = auc_results[ind_model].reshape(num_r, num_beta)
         row, col = ind_model % num_gamma, ind_model // num_gamma
         ax = axs[row,col]
         im = ax.pcolor(auc_model, cmap=im_colorbar.get_cmap(), clim=im_colorbar.get_clim())
-        ax.set_title(hc_model.name)
+        ax.set_title(hc_model.full_name_param)
         ax.set_xlabel('Beta')
         ax.set_xticks(x_ticks)
         ax.set_xticklabels(x_tick_labels)
