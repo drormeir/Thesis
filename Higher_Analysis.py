@@ -9,32 +9,40 @@ from Higher_Criticism import *
 from typing import Any, Sequence
 
 def AUC_best_objectives_from_random_values(
-        hc_models: list,\
+        hc_models: list[Base_Rejection_Method],\
         signal_generators: Sequence[Data_Generator_Base],\
         monte_carlo: int = 10000, chunk_size: int = 100) -> np.ndarray:
     N = signal_generators[0].N
     data_generators: list[Data_Generator_Base] = [Data_Generator_Noise(N)]
     data_generators += signal_generators
     num_signal_generators = len(signal_generators)
-    num_models = len(hc_models)
-    signal_values = np.empty(shape=(num_signal_generators+1,num_models,monte_carlo))
-    for seed0 in tqdm(list(range(0,monte_carlo,chunk_size))):
-        seed1 = min(seed0+chunk_size,monte_carlo)
-        seeds = list(range(seed0,seed1))
-        random_values = Data_Generator_Base.generate_random_values(N=N, seeds=seeds)
-        for ind_generator, data_generator in enumerate(data_generators):
-            data_generator.generate_from_random_values(random_values=random_values)
-            for ind_model, hc_model in enumerate(hc_models):
-                hc_model.run_sorted_p(data_generator.p_values)
-                signal_values[ind_generator, ind_model, seed0:seed1] = hc_model.best_objective
-    result = np.empty(shape=(num_models, num_signal_generators))
+    num_gamma_per_model = [model.gamma.size for model in hc_models]
+    num_gamma_models = np.sum(num_gamma_per_model)
+    ind_gamma_model_base = np.cumsum([0] + num_gamma_per_model[:-1])
+    signal_values = np.empty(shape=(num_signal_generators+1,num_gamma_models,monte_carlo))
+    with tqdm(total=monte_carlo*num_signal_generators) as progress_bar:
+        for seed0 in tqdm(list(range(0,monte_carlo,chunk_size))):
+            seed1 = min(seed0+chunk_size,monte_carlo)
+            seeds = list(range(seed0,seed1))
+            random_values = Data_Generator_Base.generate_random_values(N=N, seeds=seeds)
+            for ind_generator, data_generator in enumerate(data_generators):
+                data_generator.generate_from_random_values(random_values=random_values)
+                for ind_base_model, hc_model in enumerate(hc_models):
+                    hc_model.run_sorted_p(data_generator.p_values)
+                    for ind_gamma in range(num_gamma_per_model[ind_base_model]):
+                        ind_model_gamma = ind_gamma_model_base[ind_base_model] + ind_gamma
+                        signal_values[ind_generator, ind_model_gamma, seed0:seed1] = hc_model.best_objective[:,ind_gamma]
+                progress_bar.update(len(seeds))
+    result = np.empty(shape=(num_gamma_models, num_signal_generators))
     noise_values, signal_values = signal_values[0], signal_values[1:]
     auc_params = Two_Lists_Tuple(list(enumerate(hc_models)), list(range(num_signal_generators)))
-    for (ind_model, hc_model), ind_signal in tqdm(auc_params):
-        auc, _, _ = signal_2_noise_roc(\
-            signal_values=signal_values[ind_signal][ind_model],\
-            noise_values=noise_values[ind_model])
-        result[ind_model, ind_signal] = auc
+    for (ind_base_model, hc_model), ind_signal in tqdm(auc_params):
+        for ind_gamma in range(num_gamma_per_model[ind_base_model]):
+            ind_model_gamma = ind_gamma_model_base[ind_base_model] + ind_gamma
+            auc, _, _ = signal_2_noise_roc(\
+                signal_values=signal_values[ind_signal][ind_model_gamma],\
+                noise_values=noise_values[ind_model_gamma])
+            result[ind_model_gamma, ind_signal] = auc
     return result
 
 
@@ -43,17 +51,24 @@ def AUC_asymptotic_analysis_multi_size(\
         monte_carlo: int = 10000, chunk_size: int = 100) -> None:
     params_list = [(ind_beta,beta,ind_r,r) for ind_beta, beta in enumerate(beta_range) for ind_r, r in enumerate(r_range)]
     model_result_shape = (len(N_range),len(r_range),len(beta_range))
-    collect_results = {model.full_name: np.empty(shape=model_result_shape, dtype=np.float32) for model in hc_models}
+    num_gamma_per_model = [model.gamma.size for model in hc_models]
+    num_gamma_models = np.sum(num_gamma_per_model)
+    ind_gamma_model_base = np.cumsum([0] + num_gamma_per_model[:-1])
+
+    collect_results = {}
     line_params_per_model = {}
-    for model in hc_models:
-        # dictionary type hinting to avoid warnings
-        line_params: dict[str, int | str] = {}
-        if isinstance(model, (Higher_Criticism, Import_HC)):
-            line_params['linestyle'] = 'dashed' if model.is_power else 'solid'
-        else:
-            line_params['linestyle'] = 'dotted'
-            line_params['linewidth'] = 3
-        line_params_per_model[model.full_name] = line_params
+    for ind_model, model in enumerate(hc_models):
+        for ind_gamma, gamma in enumerate(model.gamma):
+            full_name = model.get_full_name_with_gamma(ind_gamma=ind_gamma)
+            # dictionary type hinting to avoid warnings
+            line_params: dict[str, int | str] = {}
+            if isinstance(model, (Higher_Criticism, Import_HC)):
+                line_params['linestyle'] = 'dashed' if gamma <=0 else 'solid'
+            else:
+                line_params['linestyle'] = 'dotted'
+                line_params['linewidth'] = 3
+            line_params_per_model[full_name] = line_params
+            collect_results[full_name] = np.empty(shape=model_result_shape, dtype=np.float32)
 
     for ind_N, N in enumerate(N_range):
         print(f'Working on sample size: {N}')
@@ -62,10 +77,13 @@ def AUC_asymptotic_analysis_multi_size(\
             hc_models=hc_models, signal_generators=signal_generators,\
             monte_carlo=monte_carlo, chunk_size=chunk_size)
             
-        for ind_model, hc_model in enumerate(hc_models):
-            for ind_param, param in enumerate(params_list):
-                ind_beta, beta, ind_r, r = param
-                collect_results[hc_model.full_name][ind_N, ind_r, ind_beta] = auc_results[ind_model][ind_param]
+        for ind_base_model, model in enumerate(hc_models):
+            for ind_gamma in range(num_gamma_per_model[ind_base_model]):
+                full_name = model.get_full_name_with_gamma(ind_gamma=ind_gamma)
+                ind_gamma_model = ind_gamma_model_base[ind_base_model] + ind_gamma
+                for ind_param, param in enumerate(params_list):
+                    ind_beta, beta, ind_r, r = param
+                    collect_results[full_name][ind_N, ind_r, ind_beta] = auc_results[ind_gamma_model][ind_param]
 
     for ind_beta, beta, ind_r, r in params_list:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
@@ -85,20 +103,16 @@ def AUC_asymptotic_analysis_multi_size(\
 
 def AUC_full_analysis_single_size(\
         N: int, beta_range: list[float], r_range: list[float],\
-        gamma_range: list[float],\
-        major_models: Sequence[Base_Rejection_Method],\
-        stables_flags: int = 3, global_max_flags: int = 3,\
+        major_models: list[Base_Rejection_Method],\
         monte_carlo: int = 10000, chunk_size: int = 100) -> None:
-    assert 1 <= stables_flags <= 3
-    assert 1 <= global_max_flags <= 3
     params_list = Two_Lists_Tuple(r_range, beta_range)
     signal_generators = [Data_Generator(**Data_Generator.params_from_N_r_beta(N=N, r=r, beta=beta)) for r, beta in params_list]
     num_major_models = len(major_models)
-    hc_models = [major_model.clone_with_gamma(gamma=gamma) for major_model in major_models for gamma in gamma_range]
+    num_gamma = major_models[0].gamma.size
     auc_results = AUC_best_objectives_from_random_values(\
-        hc_models=hc_models, signal_generators=signal_generators,\
+        hc_models=major_models, signal_generators=signal_generators,\
         monte_carlo=monte_carlo, chunk_size=chunk_size)
-    num_gamma = len(gamma_range)
+    assert auc_results.shape == (num_major_models*num_gamma,len(params_list))
     num_beta = len(beta_range)
     num_r = len(r_range)
     im_colorbar = ScalarMappable()
@@ -110,31 +124,32 @@ def AUC_full_analysis_single_size(\
     y_tick_labels = [f'{r:.2f}' for r in r_range]
     fig, axs = plt.subplots(figsize=(num_major_models*4, 5*num_gamma),
                             nrows=num_gamma, ncols=num_major_models, sharex=False, sharey=True)
-    ind_params_best_per_model = [[] for _ in range(len(hc_models))]  # for _ in... --> different instances of list
-    for ind_param_best, ind_model in enumerate(auc_results.argmax(axis=0)):
+    ind_params_best_per_model = [[] for _ in range(num_gamma*num_major_models)]  # for _ in... --> different instances of list
+    for ind_param_best, ind_model_gamma in enumerate(auc_results.argmax(axis=0)):
         ind_r_best, ind_beta_best = ind_param_best // num_beta, ind_param_best % num_beta
-        ind_params_best_per_model[ind_model].append((ind_r_best,ind_beta_best))
-    for ind_model, hc_model in enumerate(hc_models):
-        auc_model = auc_results[ind_model].reshape(num_r, num_beta)
-        row, col = ind_model % num_gamma, ind_model // num_gamma
-        ax = axs[row,col]
-        im = ax.pcolor(auc_model, cmap=im_colorbar.get_cmap(), clim=im_colorbar.get_clim())
-        ax.set_title(hc_model.full_name_param)
-        ax.set_xlabel('Beta')
-        ax.set_xticks(x_ticks)
-        ax.set_xticklabels(x_tick_labels)
-        if col == 0:
-            ax.set_ylabel(hc_model.str_gamma + '\n\nr')
-            ax.set_yticks(y_ticks)
-            ax.set_yticklabels(y_tick_labels)
-        is_best_r_beta = np.zeros_like(auc_model, dtype=bool)
-        for ind_r_best, ind_beta_best in ind_params_best_per_model[ind_model]:
-            is_best_r_beta[ind_r_best, ind_beta_best] = True
-        for ind_r in range(num_r):
-            for ind_beta in range(num_beta):
-                color = "w" if is_best_r_beta[ind_r, ind_beta] else "black"
-                str_value = f'{auc_model[ind_r, ind_beta]:.2f}'
-                ax.text(ind_beta+0.5, ind_r+0.5, str_value, ha="center", va="center", color=color)
+        ind_params_best_per_model[ind_model_gamma].append((ind_r_best,ind_beta_best))
+    for ind_base_model, base_model in enumerate(major_models):
+        for ind_gamma in range(num_gamma):
+            ind_model_gamma = ind_base_model*num_gamma+ind_gamma
+            auc_model = auc_results[ind_model_gamma].reshape(num_r, num_beta)
+            ax = axs[ind_gamma,ind_base_model]
+            im = ax.pcolor(auc_model, cmap=im_colorbar.get_cmap(), clim=im_colorbar.get_clim())
+            ax.set_title(base_model.get_full_name_with_gamma(ind_gamma=ind_gamma))
+            ax.set_xlabel('Beta')
+            ax.set_xticks(x_ticks)
+            ax.set_xticklabels(x_tick_labels)
+            if ind_base_model == 0:
+                ax.set_ylabel(base_model.str_gamma_list[ind_gamma] + '\n\nr')
+                ax.set_yticks(y_ticks)
+                ax.set_yticklabels(y_tick_labels)
+            is_best_r_beta = np.zeros_like(auc_model, dtype=bool)
+            for ind_r_best, ind_beta_best in ind_params_best_per_model[ind_model_gamma]:
+                is_best_r_beta[ind_r_best, ind_beta_best] = True
+            for ind_r in range(num_r):
+                for ind_beta in range(num_beta):
+                    color = "w" if is_best_r_beta[ind_r, ind_beta] else "black"
+                    str_value = f'{auc_model[ind_r, ind_beta]:.2f}'
+                    ax.text(ind_beta+0.5, ind_r+0.5, str_value, ha="center", va="center", color=color)
     fig.suptitle(f'AUC according to selected value of objective function for signal detection in sample size: {N}', y=1)
     fig.tight_layout()
     # set color bars only after tight layout
