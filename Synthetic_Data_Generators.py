@@ -90,7 +90,16 @@ class Multi_Class_Normal_Population(Data_Generator_Base):
         mu = math.sqrt(2*r*math.log(N))
         fraction = math.pow(N,-beta)
         return Multi_Class_Normal_Population.params_from_N_mu_fraction(N=N,mu=mu,fraction=fraction)
-
+    
+    @staticmethod
+    def params_list_from_N_r_beta(N: int|list[int], r: float|list[float], beta: float|list[float]) -> list[dict]:
+        if not isinstance(N,list):
+            N = [N]
+        if not isinstance(r,list):
+            r = [r]
+        if not isinstance(beta,list):
+            beta = [beta]
+        return [Multi_Class_Normal_Population.params_from_N_r_beta(*params) for params in itertools.product(N,r,beta)]
 
     @staticmethod
     def params_dicts_from_lists_N_mu_fraction(N_range: list[int], mu_range: list[float], fraction_range: list[float]) -> list[dict]:

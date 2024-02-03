@@ -17,9 +17,8 @@ def AUC_best_objectives_from_random_values(
     data_generators += signal_generators
     num_signal_generators = len(signal_generators)
     num_gamma_per_model = [model.gamma.size for model in hc_models]
-    num_gamma_models = np.sum(num_gamma_per_model)
-    ind_gamma_model_base = np.cumsum([0] + num_gamma_per_model[:-1])
-    signal_values = np.empty(shape=(num_signal_generators+1,num_gamma_models,monte_carlo))
+    ind_gamma_model_base = np.cumsum([0] + num_gamma_per_model)
+    signal_values = np.empty(shape=(num_signal_generators+1,ind_gamma_model_base[-1],monte_carlo))
     with tqdm(total=monte_carlo*num_signal_generators) as progress_bar:
         for seed0 in tqdm(list(range(0,monte_carlo,chunk_size))):
             seed1 = min(seed0+chunk_size,monte_carlo)
@@ -33,7 +32,7 @@ def AUC_best_objectives_from_random_values(
                         ind_model_gamma = ind_gamma_model_base[ind_base_model] + ind_gamma
                         signal_values[ind_generator, ind_model_gamma, seed0:seed1] = hc_model.best_objective[:,ind_gamma]
                 progress_bar.update(len(seeds))
-    result = np.empty(shape=(num_gamma_models, num_signal_generators))
+    result = np.empty(shape=(ind_gamma_model_base[-1], num_signal_generators))
     noise_values, signal_values = signal_values[0], signal_values[1:]
     auc_params = Two_Lists_Tuple(list(enumerate(hc_models)), list(range(num_signal_generators)))
     for (ind_base_model, hc_model), ind_signal in tqdm(auc_params):
@@ -52,12 +51,11 @@ def AUC_asymptotic_analysis_multi_size(\
     params_list = [(ind_beta,beta,ind_r,r) for ind_beta, beta in enumerate(beta_range) for ind_r, r in enumerate(r_range)]
     model_result_shape = (len(N_range),len(r_range),len(beta_range))
     num_gamma_per_model = [model.gamma.size for model in hc_models]
-    num_gamma_models = np.sum(num_gamma_per_model)
-    ind_gamma_model_base = np.cumsum([0] + num_gamma_per_model[:-1])
+    ind_gamma_model_base = np.cumsum([0] + num_gamma_per_model)
 
     collect_results = {}
     line_params_per_model = {}
-    for ind_model, model in enumerate(hc_models):
+    for model in hc_models:
         for ind_gamma, gamma in enumerate(model.gamma):
             full_name = model.get_full_name_with_gamma(ind_gamma=ind_gamma)
             # dictionary type hinting to avoid warnings
@@ -105,16 +103,16 @@ def AUC_full_analysis_single_size(\
         N: int, beta_range: list[float], r_range: list[float],\
         major_models: list[Base_Rejection_Method],\
         monte_carlo: int = 10000, chunk_size: int = 100) -> None:
-    params_list = Two_Lists_Tuple(r_range, beta_range)
-    signal_generators = [Data_Generator(**Data_Generator.params_from_N_r_beta(N=N, r=r, beta=beta)) for r, beta in params_list]
+    params_list = Data_Generator.params_list_from_N_r_beta(N=N, r=r_range, beta=beta_range)
+    signal_generators = [Data_Generator(**params) for params in params_list]
     num_major_models = len(major_models)
-    num_gamma = major_models[0].gamma.size
     auc_results = AUC_best_objectives_from_random_values(\
         hc_models=major_models, signal_generators=signal_generators,\
         monte_carlo=monte_carlo, chunk_size=chunk_size)
-    assert auc_results.shape == (num_major_models*num_gamma,len(params_list))
-    num_beta = len(beta_range)
     num_r = len(r_range)
+    num_beta = len(beta_range)
+    num_gamma = major_models[0].gamma.size
+    assert auc_results.shape == (num_major_models*num_gamma,num_r*num_beta)
     im_colorbar = ScalarMappable()
     im_colorbar.set_clim(vmin=0.5, vmax=1.0)
     im_colorbar.set_cmap('rainbow')
@@ -124,7 +122,8 @@ def AUC_full_analysis_single_size(\
     y_tick_labels = [f'{r:.2f}' for r in r_range]
     fig, axs = plt.subplots(figsize=(num_major_models*4, 5*num_gamma),
                             nrows=num_gamma, ncols=num_major_models, sharex=False, sharey=True)
-    ind_params_best_per_model = [[] for _ in range(num_gamma*num_major_models)]  # for _ in... --> different instances of list
+    # for _ in... --> different instances of list
+    ind_params_best_per_model = [[] for _ in range(num_gamma*num_major_models)]
     for ind_param_best, ind_model_gamma in enumerate(auc_results.argmax(axis=0)):
         ind_r_best, ind_beta_best = ind_param_best // num_beta, ind_param_best % num_beta
         ind_params_best_per_model[ind_model_gamma].append((ind_r_best,ind_beta_best))
@@ -134,7 +133,7 @@ def AUC_full_analysis_single_size(\
             auc_model = auc_results[ind_model_gamma].reshape(num_r, num_beta)
             ax = axs[ind_gamma,ind_base_model]
             im = ax.pcolor(auc_model, cmap=im_colorbar.get_cmap(), clim=im_colorbar.get_clim())
-            ax.set_title(base_model.get_full_name_with_gamma(ind_gamma=ind_gamma))
+            ax.set_title(base_model.full_name_param)
             ax.set_xlabel('Beta')
             ax.set_xticks(x_ticks)
             ax.set_xticklabels(x_tick_labels)
@@ -164,6 +163,65 @@ def AUC_full_analysis_single_size(\
         fig.colorbar(im_colorbar, cax=cax)
     plt.show()
 
+def display_simulation_results(
+        suptitle: str, simulation_results: np.ndarray, major_models: list[Base_Rejection_Method],\
+        r_range: list[float], beta_range: list[float], vmin: float, vmax: float):
+    num_r = len(r_range)
+    num_beta = len(beta_range)
+    num_major_models = len(major_models)
+    num_gamma = major_models[0].gamma.size
+
+    assert simulation_results.shape == (num_major_models*num_gamma,num_r*num_beta)
+    im_colorbar = ScalarMappable()
+    im_colorbar.set_clim(vmin=vmin, vmax=vmax)
+    im_colorbar.set_cmap('rainbow')
+    x_ticks = np.linspace(0.5, num_beta-0.5, num=num_beta)
+    x_tick_labels = [f'{beta:.2f}' for beta in beta_range]
+    y_ticks = np.linspace(0.5, num_r-0.5, num=num_r)
+    y_tick_labels = [f'{r:.2f}' for r in r_range]
+    fig, axs = plt.subplots(figsize=(num_major_models*4, 5*num_gamma),
+                            nrows=num_gamma, ncols=num_major_models, sharex=False, sharey=True)
+    # for _ in... --> different instances of list
+    ind_params_best_per_model = [[] for _ in range(num_gamma*num_major_models)]
+    for ind_param_best, ind_model_gamma in enumerate(simulation_results.argmax(axis=0)):
+        ind_r_best, ind_beta_best = ind_param_best // num_beta, ind_param_best % num_beta
+        ind_params_best_per_model[ind_model_gamma].append((ind_r_best,ind_beta_best))
+    for ind_base_model, base_model in enumerate(major_models):
+        for ind_gamma in range(num_gamma):
+            ind_model_gamma = ind_base_model*num_gamma+ind_gamma
+            auc_model = simulation_results[ind_model_gamma].reshape(num_r, num_beta)
+            ax = axs[ind_gamma,ind_base_model]
+            im = ax.pcolor(auc_model, cmap=im_colorbar.get_cmap(), clim=im_colorbar.get_clim())
+            ax.set_title(base_model.full_name_param)
+            ax.set_xlabel('Beta')
+            ax.set_xticks(x_ticks)
+            ax.set_xticklabels(x_tick_labels)
+            if ind_base_model == 0:
+                ax.set_ylabel(base_model.str_gamma_list[ind_gamma] + '\n\nr')
+                ax.set_yticks(y_ticks)
+                ax.set_yticklabels(y_tick_labels)
+            is_best_r_beta = np.zeros_like(auc_model, dtype=bool)
+            for ind_r_best, ind_beta_best in ind_params_best_per_model[ind_model_gamma]:
+                is_best_r_beta[ind_r_best, ind_beta_best] = True
+            for ind_r in range(num_r):
+                for ind_beta in range(num_beta):
+                    color = "w" if is_best_r_beta[ind_r, ind_beta] else "black"
+                    str_value = f'{auc_model[ind_r, ind_beta]:.2f}'
+                    ax.text(ind_beta+0.5, ind_r+0.5, str_value, ha="center", va="center", color=color)
+    fig.suptitle(suptitle, y=1)
+    fig.tight_layout()
+    # set color bars only after tight layout
+    row_height = 1/num_gamma
+    x0 = 1
+    width = 0.03
+    height = 0.82*row_height
+    for row in range(num_gamma):
+        dy_above_bottom = 0.03 + 0.1*row/num_gamma
+        bottom_y = (num_gamma-1-row+dy_above_bottom)*row_height
+        cax = fig.add_axes((x0, bottom_y, width, height))
+        fig.colorbar(im_colorbar, cax=cax)
+    plt.show()
+
 
 class Monte_carlo_Confusion_Matrices:
     def __init__(self,
@@ -172,17 +230,24 @@ class Monte_carlo_Confusion_Matrices:
         monte_carlo: int = 10000, chunk_size: int = 100) -> None:
         N = signal_generators[0].N
         num_signal_generators = len(signal_generators)
-        num_models = len(hc_models)
-        self.confusion_matrices = np.empty(shape=(num_models,num_signal_generators,monte_carlo,4))
-        for seed0 in tqdm(list(range(0,monte_carlo,chunk_size))):
-            seed1 = min(seed0+chunk_size,monte_carlo)
-            seeds = list(range(seed0,seed1))
-            random_values = Data_Generator_Base.generate_random_values(N=N, seeds=seeds)
-            for ind_generator, signal_generator in enumerate(signal_generators):
-                signal_generator.generate_from_random_values(random_values=random_values)
-                for ind_model, hc_model in enumerate(hc_models):
-                    hc_model.run_sorted_p(signal_generator.p_values)
-                    self.confusion_matrices[ind_model, ind_generator, seed0:seed1] = signal_generator.calc_confusion(hc_model.num_rejected)
+        num_gamma_per_model = [model.gamma.size for model in hc_models]
+        ind_gamma_model_base = np.cumsum([0] + num_gamma_per_model)
+        self.confusion_matrices = np.empty(shape=(ind_gamma_model_base[-1],num_signal_generators,monte_carlo,4))
+        with tqdm(total=monte_carlo*num_signal_generators) as progress_bar:
+            for seed0 in list(range(0,monte_carlo,chunk_size)):
+                seed1 = min(seed0+chunk_size,monte_carlo)
+                seeds = list(range(seed0,seed1))
+                random_values = Data_Generator_Base.generate_random_values(N=N, seeds=seeds)
+                for ind_generator, signal_generator in enumerate(signal_generators):
+                    signal_generator.generate_from_random_values(random_values=random_values)
+                    for ind_base_model, hc_model in enumerate(hc_models):
+                        hc_model.run_sorted_p(signal_generator.p_values)
+                        for ind_gamma in range(num_gamma_per_model[ind_base_model]):
+                            ind_model_gamma = ind_gamma_model_base[ind_base_model] + ind_gamma
+                            confusion_per_seeds = signal_generator.calc_confusion(hc_model.num_rejected[:,ind_gamma])
+                            self.confusion_matrices[ind_model_gamma, ind_generator, seed0:seed1] = confusion_per_seeds
+                            pass
+                    progress_bar.update(len(seeds))
         
     def apply_func(self, func) -> np.ndarray:
         num_models, num_signal_generators = self.confusion_matrices.shape[:2]
@@ -214,7 +279,7 @@ class Monte_carlo_Confusion_Matrices:
             return np.mean(mdr_all)
         return self.apply_func(mean_mdr)
     
-    def apply_sqrt_mean_misclassification_rate(self) -> np.ndarray:
+    def apply_sqrt_mean_entire_misclassification_rate(self) -> np.ndarray:
         def mean_mdr(true_positive, false_positive, true_negative, false_negative) -> float:
             mcr_all = true_positive == 0
             return mcr_all.mean()**0.5
