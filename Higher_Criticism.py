@@ -13,20 +13,40 @@ class Base_Rejection_Method:
     Selection_Method_LocalMin = 'localmin'
     Selection_Methods = [Selection_Method_ArgMin, Selection_Method_LastNegative, Selection_Method_LocalMin, Selection_Method_ArgMax]
 
-    def __init__(self, name: str, gamma: list[float] | np.ndarray,\
+    def __init__(self, name: str, gamma: float | list[float|str] | np.ndarray,\
                  selection_method: str,\
                  save_objectives: bool,\
                  str_param: str = '') -> None:
-        assert np.max(gamma) <= 1.0
-        assert np.min(gamma) >= -1.0
+        if isinstance(gamma,float):
+            self.gamma = [gamma]
+        elif isinstance(gamma,np.ndarray):
+            self.gamma = gamma.tolist()
+        elif isinstance(gamma,list):
+            self.gamma = gamma
+        else:
+            self.gamma = []
+        for g in self.gamma:
+            if isinstance(g,float):
+                assert -1.0 < g <= 1.0
+            else:
+                assert isinstance(g,str)
+                assert g == 'logsqrt'
+
         assert selection_method in Base_Rejection_Method.Selection_Methods
         self.name = name
         self.str_param = str_param
         self.selection_method = selection_method
-        self.gamma = np.array(gamma, dtype=np.float32)
-        self.N_gamma = np.zeros_like(self.gamma, dtype=np.int32)
-        self.effective_gamma = np.zeros_like(self.gamma)
-        self.str_gamma_list = [f'gamma={gamma:.2f}' if gamma > 0 else f'gammaPower={-gamma:.2f}' for gamma in self.gamma]
+        self.num_gamma = len(self.gamma)
+        self.N_gamma = np.zeros(shape=(self.num_gamma,), dtype=np.int32)
+        self.effective_gamma = np.zeros(shape=(self.num_gamma,), dtype=np.float32)
+        self.str_gamma_list = []
+        for g in self.gamma:
+            if isinstance(g,str):
+                self.str_gamma_list.append(g)
+            elif g > 0:
+                self.str_gamma_list.append(f'gamma={g:.2f}')
+            else:
+                self.str_gamma_list.append(f'gammaPower={-g:.2f}')
         self.num_rejected = np.empty(shape=0, dtype=np.int32)
         self.best_objective = np.empty(shape=0, dtype=float)
         self.p_threshold = np.empty(shape=0, dtype=float)
@@ -36,6 +56,7 @@ class Base_Rejection_Method:
             self.full_name_param += ' ' + self.str_param
         self.full_name = self.full_name_param
         self.is_method_min = self.selection_method != Base_Rejection_Method.Selection_Method_ArgMax
+        self.is_method_max = ~self.is_method_min
         self.objectives = np.empty(shape=0) if save_objectives else None
 
     def get_full_name_with_gamma(self, ind_gamma: int) -> str:
@@ -45,10 +66,14 @@ class Base_Rejection_Method:
         if self.i_N.size == N:
             return
         self.i_N = np.arange(1,N+1).reshape(1,-1) / N
-        N_gamma = np.empty_like(self.gamma)
-        is_gamma_power = self.gamma <= 0
-        N_gamma[is_gamma_power] = N**-self.gamma[is_gamma_power]
-        N_gamma[~is_gamma_power] = N*self.gamma[~is_gamma_power]
+        N_gamma = np.empty_like(self.effective_gamma)
+        for ind_gamma, gamma in enumerate(self.gamma):
+            if isinstance(gamma,str):
+                N_gamma[ind_gamma] = min(math.log(N)*math.sqrt(N),N)
+            elif gamma <= 0:
+                N_gamma[ind_gamma] = N**-gamma
+            else:
+                N_gamma[ind_gamma] = N*gamma
         self.N_gamma[:] = np.maximum(1,N_gamma+0.5).astype(self.N_gamma.dtype)
         self.effective_gamma = np.minimum((self.N_gamma+1e-3)/N,1.0)
         self.gamma_ip = self.N_gamma - 1
@@ -60,9 +85,8 @@ class Base_Rejection_Method:
         self.run_sorted_p(np.sort(p_values_unsorted))
 
     def run_sorted_p(self, p_values_sorted: np.ndarray) -> None:
-        num_gamma = self.gamma.size
         num_p_vectors, N = p_values_sorted.shape
-        self.p_threshold = np.empty(shape=(num_p_vectors,num_gamma), dtype=float)
+        self.p_threshold = np.empty(shape=(num_p_vectors,self.num_gamma), dtype=float)
         self.best_objective = np.empty_like(self.p_threshold)
         self.calc_i_N(N)
         objectives = self.work_sorted_p(p_values_sorted)
@@ -133,7 +157,7 @@ class Base_Rejection_Method:
             ind_lowest_objective = np.copy(selected_indexes)
             best_beyond = np.zeros_like(selected_indexes)
             for ind_objective in objectives.argsort(axis=1).T:
-                ind_objective = np.repeat(ind_objective.reshape(-1,1), repeats=num_gamma, axis=1)
+                ind_objective = np.repeat(ind_objective.reshape(-1,1), repeats=self.num_gamma, axis=1)
                 beyond_objective = ind_lowest_objective - ind_objective
                 better_mask = beyond_objective >= best_beyond
                 selected_indexes[better_mask] = ind_objective[better_mask]
@@ -142,9 +166,11 @@ class Base_Rejection_Method:
         self.best_objective = np.array([p_vector_objectives[p_vector_select] for p_vector_select, p_vector_objectives in zip(selected_indexes,objectives)])
         self.p_threshold = np.array([p_vector[p_vector_select] for p_vector_select, p_vector in zip(selected_indexes,p_values_sorted)])
         self.num_rejected = selected_indexes + 1
+        '''
         invalid_selections = self.best_objective > 0
         self.p_threshold[invalid_selections] = 0
         self.num_rejected[invalid_selections] = 0
+        '''
 
     def work_sorted_p(self, p_values_sorted: np.ndarray) -> np.ndarray:
         assert 0
@@ -153,7 +179,7 @@ class Base_Rejection_Method:
 class Bonferroni(Base_Rejection_Method):
     def __init__(self,\
                  alpha: float = 1,\
-                 gamma: list[float] | np.ndarray = [1.],\
+                 gamma: list[float|str] | np.ndarray = [1.],\
                  selection_method: str = Base_Rejection_Method.Selection_Method_LastNegative,\
                  save_objectives: bool = False):
         super().__init__(name='Bonferroni',\
@@ -169,7 +195,7 @@ class Bonferroni(Base_Rejection_Method):
 
 class Benjamini_Hochberg(Base_Rejection_Method):
     def __init__(self, alpha: float,\
-                 gamma: list[float] | np.ndarray = [1.],\
+                 gamma: list[float|str] | np.ndarray = [1.],\
                  selection_method: str = Base_Rejection_Method.Selection_Method_LastNegative,\
                  save_objectives: bool = False):
         super().__init__(name='Benjamini-Hochberg', gamma=gamma,
@@ -182,7 +208,7 @@ class Benjamini_Hochberg(Base_Rejection_Method):
 
 
 class Lowest_Angle(Base_Rejection_Method):
-    def __init__(self, gamma: list[float] | np.ndarray = [1.],\
+    def __init__(self, gamma: list[float|str] | np.ndarray = [1.],\
                  selection_method: str = Base_Rejection_Method.Selection_Method_ArgMin,\
                  save_objectives: bool = False):
         super().__init__(name='Lowest-Angle', gamma=gamma,
@@ -193,7 +219,7 @@ class Lowest_Angle(Base_Rejection_Method):
 
 
 class Kolmogorov_Smirnov(Base_Rejection_Method):  # Kolmogorov-Smirnov test
-    def __init__(self, mode: int = 1, gamma: list[float] | np.ndarray = [1.],\
+    def __init__(self, mode: int = 1, gamma: list[float|str] | np.ndarray = [1.],\
                  selection_method: str = Base_Rejection_Method.Selection_Method_ArgMin,\
                  save_objectives: bool = False) -> None:
         super().__init__(name='Kolmogorov-Smirnov ' + ('one' if mode == 1 else 'two'),\
@@ -222,7 +248,7 @@ class Kolmogorov_Smirnov(Base_Rejection_Method):  # Kolmogorov-Smirnov test
 
 
 class Import_HC(Base_Rejection_Method):
-    def __init__(self, gamma: list[float] | np.ndarray = [0.3], stable: bool = True,\
+    def __init__(self, gamma: list[float|str] | np.ndarray = [0.3], stable: bool = True,\
                  save_objectives: bool = False) -> None:
         super().__init__(name='Import HC ' + ('Stable' if stable else 'Unstable'),
                          gamma=gamma, selection_method=Base_Rejection_Method.Selection_Method_ArgMax, save_objectives=save_objectives)
@@ -242,7 +268,7 @@ class Import_HC(Base_Rejection_Method):
 
 
 class Higher_Criticism(Base_Rejection_Method):
-    def __init__(self, gamma: list[float] | np.ndarray, selection_method: str = Base_Rejection_Method.Selection_Method_ArgMin,\
+    def __init__(self, gamma: float | list[float|str] | np.ndarray, selection_method: str = Base_Rejection_Method.Selection_Method_ArgMax,\
                  stable: bool = True, save_objectives: bool = False):
         super().__init__(name=f'Higher Criticism{"" if stable else " Unstable"}',\
                          gamma=gamma, selection_method=selection_method, save_objectives=save_objectives)
@@ -259,9 +285,9 @@ class Higher_Criticism(Base_Rejection_Method):
         else:
             denominator = np.sqrt(p_values_sorted*(1-p_values_sorted))
         active_N = denominator.shape[1]
-        nominator = math.sqrt(N)*(p_values_sorted[:,:active_N] - self.i_N[:,:active_N])
+        nominator = math.sqrt(N)*(self.i_N[:,:active_N] - p_values_sorted[:,:active_N])
         objectives = nominator / denominator
-        if not self.is_method_min:
+        if not self.is_method_max:
             objectives *= -1
         return objectives
 
@@ -273,13 +299,13 @@ class Higher_Criticism(Base_Rejection_Method):
         lowest_angle = []
         for i in tqdm(range(0,monte_carlo,chunk_size), disable=disable_tqdm):
             data_generator.generate(seeds=list(range(i,min(i+chunk_size,monte_carlo))))
-            p_values = np.sort(data_generator.p_values, axis=1)
-            self.run_sorted_p(p_values)
+            self.run_sorted_p(data_generator.p_values)
             # collecting data from objective function
             best_objectives += list(self.best_objective.reshape(-1))
             nums_rejected += list(self.num_rejected.reshape(-1))
-            first_p_value += list(p_values[:,0].reshape(-1))
-            lowest_angle += list(np.min(p_values/self.i_N, axis=1))
+            first_p_value += list(data_generator.p_values[:,0].reshape(-1))
+            lowest_angle += list(np.min(data_generator.p_values/self.i_N, axis=1))
+        assert max(nums_rejected) > 0
         return {'nums_rejected' : nums_rejected,
                 'best_objectives':best_objectives,
                 'first_p_value': first_p_value,
@@ -317,7 +343,7 @@ class Higher_Criticism(Base_Rejection_Method):
 
 class Berk_Jones(Base_Rejection_Method):
     def __init__(self, selection_method: str = Base_Rejection_Method.Selection_Method_ArgMin,\
-                 gamma: list[float] | np.ndarray = [1.0],\
+                 gamma: list[float|str] | np.ndarray = [1.0],\
                  save_objectives: bool = False) -> None:
         super().__init__(name='Berk-Jones', gamma=gamma,\
                          selection_method=selection_method, save_objectives=save_objectives)

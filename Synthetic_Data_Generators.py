@@ -12,7 +12,9 @@ class Data_Generator_Base:
         self.N = N
         self.p_values = np.empty(shape=0)
         self.argsort = np.empty(shape=0)
-
+        self.mus = [0]
+        self.sizes = [N]
+        
     def generate(self, seeds: list[int]) -> None:
         random_values = Data_Generator_Base.generate_random_values(self.N, seeds=seeds)
         self.generate_from_random_values(random_values)
@@ -142,8 +144,11 @@ class Multi_Class_Normal_Population_Uniform(Multi_Class_Normal_Population):
 def Two_Lists_Tuple(list1: list, list2: list) -> list[tuple]:
     return list(itertools.product(list1,list2))
 
-def signal_2_noise_roc(signal_values, noise_values) -> tuple[float,np.ndarray,np.ndarray]:
-    sort_v_factor = -1 if np.mean(signal_values) > np.mean(noise_values) else 1
+def signal_2_noise_roc(signal_values, noise_values, direction: int = 0) -> tuple[float,np.ndarray,np.ndarray]:
+    if ~direction:
+        sort_v_factor = -1 if np.mean(signal_values) > np.mean(noise_values) else 1
+    else:
+        sort_v_factor = -direction
     roc_values_tuples = [(0,v*sort_v_factor) for v in noise_values] + [(1,v*sort_v_factor) for v in signal_values]
     def cmp_signal_values(t1, t2):
         v1, v2 = t1[1], t2[1]
