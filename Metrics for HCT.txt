@@ -1,0 +1,34 @@
+Metrics for HCT
+
+Optimial Gamma for binary classifying between noise and signal, based on AUC of the HC value per gamma. Parameters: r,beta,N
+
+For given length of sample N, perform: Regression of the original r,beta based on MAP classifier according to the liklihood of HC values along the sample of the length of N. The sample will be compared to the sampled distribution from each r,beta values.
+
+
+
+Low level metrics:
+Minimal Gamma to find Any True Positive.
+Gamma that maximizes the ratio between True positive and False positive
+Gamma that maximizes f1-score, acc2 socre
+topK
+topP
+gamma that minimize the estimation error of mu (convert all Pi that are lower than the threshold into mu
+
+gamma = alpha_0
+HC+ means HC only on 1/N <= Pi <= 1- 1/N (according to 2004 Donoho and 2005_07 Jin) we consider only positive values of HC
+Original stable HC = sqrt(N)(i/N-Pi)/sqrt(i/N*(1-i/N))   where: i=1..N
+Original unstable HC = sqrt(N)(i/N-Pi)/sqrt(Pi*(1-Pi))
+what about delta -0.5 for the edge effect??
+what about the beta distribution for better mean and std for calculation of p-value z score
+what about full beta distribution? to calculate p-value of p-value?
+
+
+Classical method for detection existance of any signal within a given dataset:
+k kurtosis statistics for signal detection in small sample size: (2005_07 Jin)
+k = E(X^4)/E(X^2)^2 - 3  should be sensitive for non Gaussian data
+
+M_n = max(abs(X_i)) ~ sqrt(2log n) --> if dataset has large deviation then it might be non Gaussian
+We can build null hypothesis for them and calculate the probability that a given dataset has signal
+We can measure the AUC of a classifier based on these statistics and compare its AUC to HC
+
+For pure null hypothesis of p-values we have HC ~ sqrt(2*log log n)
