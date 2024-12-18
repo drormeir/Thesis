@@ -1,22 +1,27 @@
 import warnings
 import gc
 import numpy as np
+from types import SimpleNamespace
 
-# initializing global variables
-numba_import_success = False
-cpu_njit_num_threads = np.uint32(0)
-cuda_available = False
+globals = SimpleNamespace(
+    numba_import_success = False,
+    cpu_njit_num_threads = np.uint32(0),
+    cuda_available = False,
+    max_threads_per_block = np.uint32(0),
+    min_grid_size = np.uint32(0),
+    warp_size = np.uint32(0)
+)
 
 try:
     import numba
     print("Numba version:", numba.__version__)
-    numba_import_success = True
+    globals.numba_import_success = True
 except ImportError as e:
     print(f'Could not import Numba.\n{e}')
 
 
 def init_njit() -> np.uint32:
-    if not numba_import_success:
+    if not globals.numba_import_success:
         return np.uint32(0)
     
     try:
@@ -37,7 +42,7 @@ def init_njit() -> np.uint32:
 
 
 def raise_njit_not_available():
-    if cpu_njit_num_threads > 0:
+    if globals.cpu_njit_num_threads > 0:
         raise AssertionError("Invalid state encountered in raise_njit_not_available()")
     else:
         raise AssertionError("numba.njit not available on this system.")
@@ -126,21 +131,21 @@ def init_cuda() -> bool:
     
 def print_cuda_device_attributes():
     print('Printing CUDA active device attributes:\n'+'='*50)
-    context                     = numba.cuda.current_context()
-    context_mem_info            = context.get_memory_info()
-    device                      = context.device
+    context                       = numba.cuda.current_context()
+    context_mem_info              = context.get_memory_info()
+    device                        = context.device
     # The number of Streaming Multiprocessors (SMs) affects how many blocks can run concurrently.
-    multi_processor_count       = device.MULTIPROCESSOR_COUNT
-    min_grid_size               = find_minimal_grid_size()
-    max_grid_dimensions_XYZ     = (device.MAX_GRID_DIM_X,device.MAX_GRID_DIM_Y,device.MAX_GRID_DIM_Z)
-    max_block_dimensions_XYZ    = (device.MAX_BLOCK_DIM_X,device.MAX_BLOCK_DIM_Y,device.MAX_BLOCK_DIM_Z)
-    max_threads_per_block       = device.MAX_THREADS_PER_BLOCK
-    warp_size                   = device.WARP_SIZE
-    max_shared_memory_per_block = device.MAX_SHARED_MEMORY_PER_BLOCK
-    max_registers_per_block     = device.MAX_REGISTERS_PER_BLOCK
-    memory_bus_width_bits       = device.GLOBAL_MEMORY_BUS_WIDTH
-    total_constant_memory       = device.TOTAL_CONSTANT_MEMORY
-    memory_clock_rate_MHz       = device.MEMORY_CLOCK_RATE/1000 # from KHz to MHz
+    multi_processor_count         = device.MULTIPROCESSOR_COUNT
+    min_grid_size                 = find_minimal_grid_size()
+    max_grid_dimensions_XYZ       = (device.MAX_GRID_DIM_X,device.MAX_GRID_DIM_Y,device.MAX_GRID_DIM_Z)
+    max_block_dimensions_XYZ      = (device.MAX_BLOCK_DIM_X,device.MAX_BLOCK_DIM_Y,device.MAX_BLOCK_DIM_Z)
+    globals.max_threads_per_block = device.MAX_THREADS_PER_BLOCK
+    globals.warp_size             = device.WARP_SIZE
+    max_shared_memory_per_block   = device.MAX_SHARED_MEMORY_PER_BLOCK
+    max_registers_per_block       = device.MAX_REGISTERS_PER_BLOCK
+    memory_bus_width_bits         = device.GLOBAL_MEMORY_BUS_WIDTH
+    total_constant_memory         = device.TOTAL_CONSTANT_MEMORY
+    memory_clock_rate_MHz         = device.MEMORY_CLOCK_RATE/1000 # from KHz to MHz
     print(f'    Name:                               {device.name.decode("utf-8")}')
     print(f'    Free Memory:                        {context_mem_info.free//1024} [KB]',)
     print(f'    Total Memory:                       {context_mem_info.total//1024} [KB]',)
@@ -158,8 +163,8 @@ def print_cuda_device_attributes():
     print(f'    Minimal grid size:                  {min_grid_size}')
     print(f'    Maximum grid size:                  {max_grid_dimensions_XYZ}')
     print(f'    Maximum block dimensions:           {max_block_dimensions_XYZ}')
-    print(f'    Maximum threads per block:          {max_threads_per_block}')
-    print(f'    Warp size:                          {warp_size}')
+    print(f'    Maximum threads per block:          {globals.max_threads_per_block}')
+    print(f'    Warp size:                          {globals.warp_size}')
     print(f'    Maximum shared memory per block:    {max_shared_memory_per_block} [bytes]')
     print(f'    Maximum registers per block:        {max_registers_per_block}')
     print(f'    Total constant memory:              {total_constant_memory} [bytes]')
@@ -229,16 +234,51 @@ def find_minimal_grid_size() -> int:
     return grid_size
 
 def raise_cuda_not_available():
-    if cuda_available:
+    if globals.cuda_available:
         raise CudaSupportError("Invalid state encountered in raise_cuda_not_available()")
     else:
         raise AssertionError("CUDA is not available on this system.")
     
 def cuda_garbage_collect() -> None:
-    if not cuda_available:
+    if not globals.cuda_available:
         raise_cuda_not_available()
     gc.collect(0) # generation 0 should be sufficient to release GPU memory
     numba.cuda.current_context().memory_manager.deallocations.clear()
+
+def block_size_to_warp(data_size: int|np.uint64, block_size: int|np.uint32) -> np.uint32:
+    if not globals.cuda_available:
+        raise_cuda_not_available()    
+    if block_size > globals.max_threads_per_block:
+        block_size = globals.max_threads_per_block
+    elif block_size < globals.warp_size:
+        block_size = globals.warp_size
+    else:
+        block_size -= block_size % globals.warp_size
+    if block_size >= data_size:
+        return np.uint32(data_size)
+    return np.uint32(block_size)
+
+def simple_data_size_to_grid_block(data_size: int|np.uint64,\
+                                   suggested_block_size: int|np.uint32 = 0,
+                                   suggested_grid_size: int|np.uint32 = 0,
+                                   ) -> tuple[np.uint32, np.uint32]:
+    if not globals.cuda_available:
+        raise_cuda_not_available()    
+    if suggested_grid_size:
+        grid_size = max(np.uint32(suggested_grid_size), globals.min_grid_size)
+        max_block_size = (data_size + grid_size - 1) // grid_size
+        block_size = block_size_to_warp(data_size=max_block_size, block_size=max_block_size)
+        if block_size < max_block_size:
+            return simple_data_size_to_grid_block(data_size=data_size, suggested_block_size=block_size)
+        return grid_size, block_size
+    if suggested_block_size:
+        block_size = block_size_to_warp(data_size=data_size, block_size=suggested_block_size)
+        grid_size = (data_size + block_size - 1) // block_size
+        return simple_data_size_to_grid_block(data_size=data_size,
+                                              suggested_block_size=block_size,
+                                              suggested_grid_size=grid_size)
+    return simple_data_size_to_grid_block(data_size=data_size, suggested_block_size=globals.max_threads_per_block)
+
 
 class HybridArray:
     def __init__(self) -> None:
@@ -253,11 +293,9 @@ class HybridArray:
         if self.original_numpy_data is not None:
             del self.original_numpy_data
         if self.original_numba_data is not None:
-
             del self.original_numba_data
             if gpu_garbage_collect:
                 cuda_garbage_collect()
-
         self._clear_state()
 
     def _clear_state(self) -> None:
@@ -287,6 +325,9 @@ class HybridArray:
             return self.original_numba_data.shape
         return (0,)
 
+    def realloc_like(self, other: 'HybridArray') -> 'HybridArray':
+        return self.realloc(shape=other.shape(), dtype=other.dtype(), use_gpu=other.is_gpu())
+    
     def realloc(self, shape: tuple, dtype: type | None = None, use_gpu: bool|None = None) -> 'HybridArray':
         assert len(shape)
         new_size = np.uint64(np.prod(shape))
@@ -294,7 +335,7 @@ class HybridArray:
         curr_is_gpu = self.is_gpu()
         if use_gpu is None:
             use_gpu = curr_is_gpu
-        if use_gpu and not cuda_available:
+        if use_gpu and not globals.cuda_available:
             raise_cuda_not_available()
         self_dtype = self.dtype()
         original_size = self.original_size()
@@ -303,9 +344,9 @@ class HybridArray:
             dtype = self_dtype
         if use_gpu == curr_is_gpu and original_size >= new_size and self_dtype == dtype:
             # reusing existing data
-            if self.original_numpy_data:
+            if self.original_numpy_data is not None:
                 self.data = self.original_numpy_data.reshape(-1)[:new_size].reshape(shape)
-            elif self.original_numba_data:
+            elif self.original_numba_data is not None:
                 self.data = self.original_numba_data.reshape(-1)[:new_size].reshape(shape)
             else:
                 raise AssertionError('Array realloc() failed: Neither original_numpy_data nor original_numba_data were initialized.')
@@ -323,21 +364,30 @@ class HybridArray:
     def to_cpu(self) -> 'HybridArray':
         if self.original_numba_data is not None:
             original_numpy_data = self.original_numba_data.copy_to_host()
-            data_shape, new_size = self.shape_size()
+            data_shape = self.shape()
             self.close()
             self.original_numpy_data = original_numpy_data
-            self.data = original_numpy_data.reshape(-1)[:new_size].reshape(data_shape)
+            self.reshape(data_shape, inplace=True)
         return self
     
     def to_gpu(self) -> 'HybridArray':
-        if not cuda_available:
+        if not globals.cuda_available:
             raise_cuda_not_available()
         if self.original_numpy_data is not None:
             original_numba_data = numba.cuda.to_device(self.original_numpy_data)
-            data_shape, new_size = self.shape_size()
+            data_shape = self.shape()
             self.close()
             self.original_numba_data = original_numba_data
-            self.data = original_numba_data.reshape(-1)[:new_size].reshape(data_shape)
+            self.reshape(data_shape, inplace=True)
+        return self
+    
+    def reshape(self, shape, inplace: bool = True) -> 'HybridArray':
+        assert inplace
+        size = np.uint64(np.prod(shape))
+        if self.original_numpy_data is not None:
+            self.data = self.original_numpy_data.reshape(-1)[:size].reshape(shape)
+        elif self.original_numba_data is not None:
+            self.data = self.original_numba_data.reshape(-1)[:size].reshape(shape)
         return self
     
     def shape_size(self) -> tuple[tuple,np.uint64]:
@@ -348,17 +398,67 @@ class HybridArray:
         shape = self.shape()
         return np.uint64(np.prod(shape))
     
+    def ndim(self) -> int:
+        shape = self.shape()
+        return len(shape)
+    
     def shape(self) -> tuple:
         assert self.data is not None
         return self.data.shape
 
+    def clone_from_numpy(self, data: np.ndarray, use_gpu: bool|None = None) -> 'HybridArray':
+        if use_gpu is None:
+            use_gpu = self.is_gpu()
+        self.close()
+        if use_gpu:
+            self.original_numba_data = numba.cuda.to_device(data)
+            self.data = self.original_numba_data
+        else:
+            self.original_numpy_data = np.copy(data)
+            self.data = self.original_numpy_data
+        return self
+
+    def clone_to_numpy(self) -> np.ndarray:
+        if self.original_numpy_data is not None:
+            assert isinstance(self.data, np.ndarray)
+            return np.copy(self.data)
+        if self.original_numba_data is not None:
+            assert isinstance(self.data, DeviceNDArray)
+            return self.data.copy_to_host()
+        return np.empty(shape=(0,))
+    
+    def numpy(self) -> np.ndarray:
+        if self.original_numpy_data is not None:
+            assert isinstance(self.data, np.ndarray)
+            return self.data
+        if self.original_numba_data is not None:
+            assert isinstance(self.data, DeviceNDArray)
+            return self.data.copy_to_host()
+        return np.empty(shape=(0,))
+    
+    def astype(self, dtype: type, inplace: bool = True, suppress_warning: bool = True) -> 'HybridArray':
+        assert inplace
+        if self.dtype() == dtype:
+            return self
+        data_shape = self.shape()
+        with warnings.catch_warnings():
+            if suppress_warning:
+                warnings.simplefilter("ignore", RuntimeWarning)
+            if self.original_numpy_data is not None:
+                self.original_numpy_data = self.original_numpy_data.astype(dtype=dtype)
+            elif self.original_numba_data is not None:
+                original_numpy = self.original_numba_data.copy_to_host().astype(dtype=dtype)
+                self.close()
+                self.original_numba_data = numba.cuda.to_device(original_numpy)
+        return self.reshape(data_shape, inplace=inplace)
+    
 ############################################################3
-cpu_njit_num_threads = init_njit()
+globals.cpu_njit_num_threads = init_njit()
 
 
-cuda_available = init_cuda()
+globals.cuda_available = init_cuda()
 
-if not cuda_available:
+if not globals.cuda_available:
     print("Numba or CUDA is not available. GPU operations will be disabled.")
 else:
     print_cuda_device_attributes()
