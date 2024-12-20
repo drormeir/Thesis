@@ -36,7 +36,7 @@ else:
             s0, s1 = random_integer_states_transition_cpu_njit(s0, s1)
             out[i] = random_integer_result_cpu_njit(s0, s1)
 
-    @numba.njit(parallel=True)
+    @numba.njit(parallel=False)
     def random_integer_base_states_from_seeds_cpu_njit(seeds: np.ndarray)-> tuple[np.ndarray,np.ndarray]:
         splitmix_states     = seeds
         s0, splitmix_states = splitmix64_from_states_cpu_njit(splitmix_states)
