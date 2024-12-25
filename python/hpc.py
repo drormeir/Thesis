@@ -449,6 +449,13 @@ class HybridArray:
             return self.data.copy_to_host()
         return np.empty(shape=(0,))
     
+    def crop(self, row0: int, row1: int, col0: int, col1: int) -> 'HybridArray':
+        if self.original_numpy_data is not None:
+            self.data = self.original_numpy_data[row0:row1][col0:col1]
+        elif self.original_numba_data is not None:
+            self.data = self.original_numba_data[row0:row1][col0:col1]
+        return self
+    
     def astype(self, dtype: type, inplace: bool = True, suppress_warning: bool = True) -> 'HybridArray':
         assert inplace
         if self.dtype() == dtype:
