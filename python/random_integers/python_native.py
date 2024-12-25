@@ -4,16 +4,7 @@ def random_integers_matrix_py(num_steps: np.uint32, offset_row0: np.uint32, offs
     col_seeds = np.arange(offset_col0, offset_col0 + out.shape[1], dtype=np.uint64).reshape(1,-1)
     row_seeds = np.arange(offset_row0, offset_row0 + out.shape[0], dtype=np.uint64).reshape(-1,1)
     seeds = (row_seeds << np.uint64(32)) + col_seeds
-    if num_steps == np.uint32(-1):
-        out[:] = seeds
-        return
     s0, s1 = random_integer_base_states_from_seeds_py(seeds=seeds)
-    if num_steps == np.uint32(-2):
-        out[:] = s0
-        return
-    if num_steps == np.uint32(-3):
-        out[:] = s1
-        return
     for _ in range(num_steps):
         s0, s1 = random_integer_states_transition_from_states_py(s0=s0, s1=s1)
     random_integer_result_from_states_py(s0=s0, s1=s1, result=out)

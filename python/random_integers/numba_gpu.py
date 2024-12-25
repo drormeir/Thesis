@@ -65,13 +65,7 @@ else:
                 
     @numba.cuda.jit(device=True)
     def random_integer_gpu(seed: np.uint64, num_steps: np.uint32) -> np.uint64:
-        if num_steps == np.uint32(-1): # debug mode
-            return seed
         s0, s1 = random_integer_base_states_gpu(seed)
-        if num_steps == np.uint32(-2): # debug mode
-            return s0
-        if num_steps == np.uint32(-3): # debug mode
-            return s1
         for _ in range(num_steps):
             s0, s1 = random_integer_states_transition_gpu(s0, s1)
         result64 = random_integer_result_gpu(s0, s1)

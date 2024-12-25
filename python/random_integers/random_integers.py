@@ -4,11 +4,14 @@ from python.random_integers.numba_gpu import random_integers_matrix_gpu, splitmi
 from python.random_integers.numba_cpu import random_integers_matrix_cpu_njit, splitmix64_from_states_cpu_njit, random_integer_base_states_from_seeds_cpu_njit, random_integers_series_cpu_njit
 from python.random_integers.python_native import random_integers_matrix_py, splitmix64_from_states_py, random_integer_base_states_from_seeds_py, random_integers_series_py
 
-def random_integers_matrix(data: HybridArray, offset_row0: int|np.uint32, offset_col0: int|np.uint32, num_steps: int|np.uint32 = 1, use_njit: bool|None = None) -> None:
+def random_num_steps(num_steps: int|np.uint32|None = None) -> np.uint32:
+    return np.uint32(1) if num_steps is None else np.uint32(num_steps)
+
+def random_integers_matrix(data: HybridArray, offset_row0: int|np.uint32, offset_col0: int|np.uint32, num_steps: int|np.uint32|None = None, use_njit: bool|None = None) -> None:
     data.astype(np.uint64)
     offset_row0 = np.uint32(offset_row0)
     offset_col0 = np.uint32(offset_col0)
-    num_steps = np.uint32(num_steps)
+    num_steps = random_num_steps(num_steps)
     if data.is_gpu():
         # GPU mode
         grid_shape, block_shape = simple_data_size_to_grid_block_2D(data.shape())
