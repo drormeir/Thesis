@@ -316,28 +316,6 @@ class HybridArray:
         self.original_numba_data: DeviceNDArray | None = None
         self.data: np.ndarray | DeviceNDArray | None = None
 
-    def is_gpu(self) -> bool:
-        # In case nothing is allocated yet, this function returns default: False
-        return self.original_numba_data is not None
-    
-    def is_cpu(self) -> bool:
-        # In case nothing is allocated yet, this function returns default: True
-        return not self.is_gpu()
-    
-    def dtype(self) -> type|None:
-        return self.data.dtype.type if self.data is not None else None
-    
-    def original_size(self) -> np.uint64:
-        original_shape = self.original_shape()
-        return np.uint64(np.prod(original_shape))
-    
-    def original_shape(self) -> tuple:
-        if self.original_numpy_data is not None:
-            return self.original_numpy_data.shape
-        if self.original_numba_data is not None:
-            return self.original_numba_data.shape
-        return (0,)
-
     def realloc_like(self, other: 'HybridArray') -> 'HybridArray':
         return self.realloc(shape=other.shape(), dtype=other.dtype(), use_gpu=other.is_gpu())
     
@@ -357,79 +335,44 @@ class HybridArray:
             dtype = self_dtype
         if use_gpu == curr_is_gpu and original_size >= new_size and self_dtype == dtype:
             # reusing existing data
-            if self.original_numpy_data is not None:
-                self.data = self.original_numpy_data.reshape(-1)[:new_size].reshape(shape)
-            elif self.original_numba_data is not None:
-                self.data = self.original_numba_data.reshape(-1)[:new_size].reshape(shape)
-            else:
-                raise AssertionError('Array realloc() failed: Neither original_numpy_data nor original_numba_data were initialized.')
+            return self.reshape(shape=shape)
+        # allocating new data
+        self.close()
+        if use_gpu:
+            self.original_numba_data = numba.cuda.device_array(shape=shape, dtype=dtype)
         else:
-            # allocating new data
-            self.close()
-            if use_gpu:
-                self.original_numba_data = numba.cuda.device_array(shape=shape, dtype=dtype)
-                self.data = self.original_numba_data
-            else:
-                self.original_numpy_data = np.empty(shape=shape, dtype=dtype)
-                self.data = self.original_numpy_data
-        return self
+            self.original_numpy_data = np.empty(shape=shape, dtype=dtype)
+        return self.uncrop()
     
     def to_cpu(self) -> 'HybridArray':
-        if self.original_numba_data is not None:
-            original_numpy_data = self.original_numba_data.copy_to_host()
-            data_shape = self.shape()
-            self.close()
-            self.original_numpy_data = original_numpy_data
-            self.reshape(data_shape, inplace=True)
-        return self
+        if self.original_numba_data is None:
+            return self
+        original_numpy_data = self.original_numba_data.copy_to_host()
+        data_shape = self.shape()
+        self.close()
+        self.original_numpy_data = original_numpy_data
+        return self.reshape(data_shape, inplace=True)
     
     def to_gpu(self) -> 'HybridArray':
         if not globals.cuda_available:
             raise_cuda_not_available()
-        if self.original_numpy_data is not None:
-            original_numba_data = numba.cuda.to_device(self.original_numpy_data)
-            data_shape = self.shape()
-            self.close()
-            self.original_numba_data = original_numba_data
-            self.reshape(data_shape, inplace=True)
-        return self
+        if self.original_numpy_data is None:
+            return self
+        original_numba_data = numba.cuda.to_device(self.original_numpy_data)
+        data_shape = self.shape()
+        self.close()
+        self.original_numba_data = original_numba_data
+        return self.reshape(data_shape, inplace=True)
     
-    def reshape(self, shape, inplace: bool = True) -> 'HybridArray':
-        assert inplace
-        size = np.uint64(np.prod(shape))
-        if self.original_numpy_data is not None:
-            self.data = self.original_numpy_data.reshape(-1)[:size].reshape(shape)
-        elif self.original_numba_data is not None:
-            self.data = self.original_numba_data.reshape(-1)[:size].reshape(shape)
-        return self
-    
-    def shape_size(self) -> tuple[tuple,np.uint64]:
-        shape = self.shape()
-        return shape, np.uint64(np.prod(shape))
-    
-    def size(self) -> np.uint64:
-        shape = self.shape()
-        return np.uint64(np.prod(shape))
-    
-    def ndim(self) -> int:
-        shape = self.shape()
-        return len(shape)
-    
-    def shape(self) -> tuple:
-        assert self.data is not None
-        return self.data.shape
-
     def clone_from_numpy(self, data: np.ndarray, use_gpu: bool|None = None) -> 'HybridArray':
         if use_gpu is None:
             use_gpu = self.is_gpu()
         self.close()
         if use_gpu:
             self.original_numba_data = numba.cuda.to_device(data)
-            self.data = self.original_numba_data
         else:
             self.original_numpy_data = np.copy(data)
-            self.data = self.original_numpy_data
-        return self
+        return self.uncrop()
 
     def clone_to_numpy(self) -> np.ndarray:
         if self.original_numpy_data is not None:
@@ -449,13 +392,6 @@ class HybridArray:
             return self.data.copy_to_host()
         return np.empty(shape=(0,))
     
-    def crop(self, row0: int, row1: int, col0: int, col1: int) -> 'HybridArray':
-        if self.original_numpy_data is not None:
-            self.data = self.original_numpy_data[row0:row1][col0:col1]
-        elif self.original_numba_data is not None:
-            self.data = self.original_numba_data[row0:row1][col0:col1]
-        return self
-    
     def astype(self, dtype: type, inplace: bool = True, suppress_warning: bool = True) -> 'HybridArray':
         assert inplace
         if self.dtype() == dtype:
@@ -471,6 +407,69 @@ class HybridArray:
                 self.close()
                 self.original_numba_data = numba.cuda.to_device(original_numpy)
         return self.reshape(data_shape, inplace=inplace)
+    
+    def reshape(self, shape, inplace: bool = True) -> 'HybridArray':
+        assert inplace
+        size = np.uint64(np.prod(shape))
+        if self.original_numpy_data is not None:
+            self.data = self.original_numpy_data.reshape(-1)[:size].reshape(shape)
+        elif self.original_numba_data is not None:
+            self.data = self.original_numba_data.reshape(-1)[:size].reshape(shape)
+        return self
+    
+    def crop(self, row0: int|np.uint32, row1: int|np.uint32, col0: int|np.uint32, col1: int|np.uint32) -> 'HybridArray':
+        if self.original_numpy_data is not None:
+            self.data = self.original_numpy_data[row0:row1][col0:col1]
+        elif self.original_numba_data is not None:
+            self.data = self.original_numba_data[row0:row1][col0:col1]
+        return self
+    
+    def uncrop(self) -> 'HybridArray':
+        if self.original_numpy_data is not None:
+            self.data = self.original_numpy_data
+        elif self.original_numba_data is not None:
+            self.data = self.original_numba_data
+        return self
+
+    def shape_size(self) -> tuple[tuple,np.uint64]:
+        shape = self.shape()
+        return shape, np.uint64(np.prod(shape))
+    
+    def size(self) -> np.uint64:
+        shape = self.shape()
+        return np.uint64(np.prod(shape))
+    
+    def ndim(self) -> int:
+        shape = self.shape()
+        return len(shape)
+    
+    def shape(self) -> tuple:
+        assert self.data is not None
+        return self.data.shape
+    
+    def is_gpu(self) -> bool:
+        # In case nothing is allocated yet, this function returns default: False
+        return self.original_numba_data is not None
+    
+    def is_cpu(self) -> bool:
+        # In case nothing is allocated yet, this function returns default: True
+        return self.original_numba_data is None
+    
+    def dtype(self) -> type|None:
+        return self.data.dtype.type if self.data is not None else None
+    
+    def original_size(self) -> np.uint64:
+        original_shape = self.original_shape()
+        return np.uint64(np.prod(original_shape))
+    
+    def original_shape(self) -> tuple:
+        if self.original_numpy_data is not None:
+            return self.original_numpy_data.shape
+        if self.original_numba_data is not None:
+            return self.original_numba_data.shape
+        return (0,)
+
+
     
 ############################################################3
 globals.cpu_njit_num_threads = init_njit()
