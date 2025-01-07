@@ -8,6 +8,10 @@ if not globals.cpu_njit_num_threads:
         raise_njit_not_available()
     def random_p_values_series_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
+    def modify_p_values_matrix_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def sort_and_count_labels_rows_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
 else:
     import numpy as np
     import math
@@ -15,8 +19,24 @@ else:
     from python.random_integers.numba_cpu import random_integers_matrix_cpu_njit, random_integer_base_states_cpu_njit, random_integer_states_transition_cpu_njit, random_integer_result_cpu_njit
 
     @numba.njit(parallel=True)
+    def sort_and_count_labels_rows_cpu_njit(data: np.ndarray, n1: np.uint32, counts: np.ndarray) -> None:
+        nrows, ncols = data.shape
+        for i in numba.prange(nrows):
+            idx = np.argsort(data[i])
+            data[i][:] = data[i][idx]
+            cum_sum: np.uint32 = np.uint32(0)
+            counts_i = counts[i]
+            for j in range(ncols):
+                cum_sum += np.uint32(idx[j] < n1)
+                counts_i[j] = cum_sum
+
+    @numba.njit(parallel=False)
     def random_modified_p_values_matrix_cpu_njit(num_steps: np.uint32, offset_row0: np.uint32, offset_col0: np.uint32, mu: np.float64, out: np.ndarray) -> None:
         random_p_values_matrix_cpu_njit(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=out)
+        modify_p_values_matrix_cpu_njit(out=out, mu=mu)
+
+    @numba.njit(parallel=True)
+    def modify_p_values_matrix_cpu_njit(out: np.ndarray, mu: np.float64) -> None:
         rows, cols = out.shape
         for ind in numba.prange(rows*cols):
             row = ind // cols
@@ -41,9 +61,7 @@ else:
             out[i] = (rand_int + 0.5) * norm_factor
 
     @numba.njit(parallel=False)
-    def standard_normal_isf_newton_cpu_njit(\
-            p: np.float64,\
-            tol: np.float64 = np.float64(1e-10)) -> np.float64:
+    def standard_normal_isf_newton_cpu_njit(p: np.float64) -> np.float64:
         """
         Compute the ISF (inverse survival function) for the standard normal
         by solving SF(z) = p via Newton–Raphson starting from z0 = rational approximation
@@ -64,8 +82,10 @@ else:
             f_prime = standard_normal_sf_derivative_cpu_njit(z)
             dz = - f_val / f_prime
             z += dz
+            '''
             if abs(dz) < tol:
                 break # Converged
+            '''
         return z
 
     @numba.njit(parallel=False)
@@ -78,12 +98,12 @@ else:
         d = [1.432788, 0.189269, 0.001308]
 
         if p > 0.5:
-            t = math.sqrt(-2.0 * math.log(1-p))
+            q = 1 - p
             f = np.float64(-1.0)
         else:
-            t = math.sqrt(-2.0 * math.log(p))
+            q = p
             f = np.float64(+1.0)
-
+        t = math.sqrt(-2.0 * math.log(q))
         numerator = (c[2]*t + c[1])*t + c[0]
         denominator = ((d[2]*t + d[1])*t + d[0])*t + np.float64(1.0)
         return f*(t - numerator / denominator)

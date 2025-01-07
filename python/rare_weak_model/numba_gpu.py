@@ -8,7 +8,12 @@ if not globals.cuda_available:
         raise_cuda_not_available()
     def random_p_values_series_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-
+    def arg_sort_rows_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
+    def modify_p_values_matrix_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
+    def sort_and_count_labels_rows_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
 else:
     import math
     import numpy as np
@@ -16,6 +21,14 @@ else:
     import numba.cuda
     from numba.cuda.cudadrv.devicearray import DeviceNDArray
     from python.random_integers.numba_gpu import random_integer_gpu, random_integer_base_states_gpu, random_integer_states_transition_gpu, random_integer_result_gpu
+    import cupy
+
+    def sort_and_count_labels_rows_gpu(data: DeviceNDArray, n1: np.uint32, counts: DeviceNDArray) -> None:
+        cupy_arr = cupy.asarray(data)
+        idx_sorted = cupy.argsort(cupy_arr, axis=1)
+        cupy_arr_sorted = cupy.take_along_axis(cupy_arr, idx_sorted, axis=1)
+        data[:] = numba.cuda.as_cuda_array(cupy_arr_sorted)
+        cupy.cumsum(idx_sorted<n1, axis=1, dtype=cupy.uint32, out=cupy.asarray(counts))
 
     @numba.cuda.jit(device=False)
     def random_modified_p_values_matrix_gpu(num_steps: np.uint32, offset_row0: np.uint32, offset_col0: np.uint32, mu: np.float64, out: DeviceNDArray) -> None:
@@ -30,7 +43,19 @@ else:
             for ind_col in range(ind_col0, out.shape[1], col_stride):
                 rand_int = random_integer_gpu(seed_row + np.uint64(ind_col), num_steps)
                 p_value = (rand_int + 0.5) * norm_factor
-                isf = standard_normal_isf_newton_gpu(p_value, np.float64(1e-10))
+                isf = standard_normal_isf_newton_gpu(p_value)
+                out_row[ind_col] = standard_normal_sf_gpu(isf + mu)
+
+    @numba.cuda.jit(device=False)
+    def modify_p_values_matrix_gpu(out: DeviceNDArray, mu: np.float64) -> None:
+        # Get the 2D indices of the current thread within the grid
+        ind_row0, ind_col0 = numba.cuda.grid(2) # type: ignore
+        # Calculate the strides
+        row_stride, col_stride = numba.cuda.gridsize(2) # type: ignore
+        for ind_row in range(ind_row0, out.shape[0], row_stride):
+            out_row = out[ind_row]
+            for ind_col in range(ind_col0, out.shape[1], col_stride):
+                isf = standard_normal_isf_newton_gpu(out_row[ind_col])
                 out_row[ind_col] = standard_normal_sf_gpu(isf + mu)
 
     @numba.cuda.jit(device=False)
@@ -61,7 +86,7 @@ else:
 
 
     @numba.cuda.jit(device=True)
-    def standard_normal_isf_newton_gpu(p: np.float64, tol: np.float64) -> np.float64:
+    def standard_normal_isf_newton_gpu(p: np.float64) -> np.float64:
         """
         Compute the ISF (inverse survival function) for the standard normal
         by solving SF(z) = p via Newton–Raphson starting from z0 = rational approximation
@@ -82,8 +107,10 @@ else:
             f_prime = standard_normal_sf_derivative_gpu(z)
             dz = - f_val / f_prime
             z += dz
+            '''
             if abs(dz) < tol:
                 break # Converged
+            '''
         return z
 
 
@@ -97,11 +124,12 @@ else:
         d0, d1, d2 = 1.432788, 0.189269, 0.001308
 
         if p > 0.5:
-            t = math.sqrt(-2.0 * math.log(1-p))
+            q = 1-p
             f = np.float64(-1.0)
         else:
-            t = math.sqrt(-2.0 * math.log(p))
+            q = p
             f = np.float64(+1.0)
+        t = math.sqrt(-2.0 * math.log(q))
 
         numerator = (c2*t + c1)*t + c0
         denominator = ((d2*t + d1)*t + d0)*t + np.float64(1.0)

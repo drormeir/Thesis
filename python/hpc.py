@@ -469,7 +469,9 @@ class HybridArray:
             return self.original_numba_data.shape
         return (0,)
 
-
+    def gpu_data(self) -> DeviceNDArray:
+        assert isinstance(self.data, DeviceNDArray)
+        return self.data
     
 ############################################################3
 globals.cpu_njit_num_threads = init_njit()

@@ -18,11 +18,10 @@ def random_integers_matrix(data: HybridArray, offset_row0: int|np.uint32, offset
         random_integers_matrix_gpu[grid_shape, block_shape](num_steps, offset_row0, offset_col0, data.data) # type: ignore
     else:
         # CPU mode
-        assert isinstance(data.data, np.ndarray)
         if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
-            random_integers_matrix_cpu_njit(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=data.data)
+            random_integers_matrix_cpu_njit(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=data.numpy())
         else:
-            random_integers_matrix_py(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=data.data)
+            random_integers_matrix_py(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=data.numpy())
 
 
 def splitmix64_matrix(states: np.ndarray,\
