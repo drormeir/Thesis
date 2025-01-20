@@ -319,20 +319,29 @@ class HybridArray:
     def realloc_like(self, other: 'HybridArray') -> 'HybridArray':
         return self.realloc(shape=other.shape(), dtype=other.dtype(), use_gpu=other.is_gpu())
     
-    def realloc(self, shape: tuple, dtype: type | None = None, use_gpu: bool|None = None) -> 'HybridArray':
-        assert len(shape)
+    def realloc(self,\
+                like: 'HybridArray | None' = None,\
+                shape: tuple | None = None,\
+                dtype: type | None = None,\
+                use_gpu: bool | None = None) -> 'HybridArray':
+        # determine shape
+        if shape is None:
+            shape = self.shape() if like is None else like.shape()
+        assert shape and len(shape)
         new_size = np.uint64(np.prod(shape))
         assert new_size > 0
+        # determine dtype
+        self_dtype = self.dtype()
+        if dtype is None:
+            dtype = self_dtype if like is None else like.dtype()
+            assert dtype is not None
+        # determine is_gpu
         curr_is_gpu = self.is_gpu()
         if use_gpu is None:
-            use_gpu = curr_is_gpu
+            use_gpu = curr_is_gpu if like is None else like.is_gpu()
         if use_gpu and not globals.cuda_available:
             raise_cuda_not_available()
-        self_dtype = self.dtype()
         original_size = self.original_size()
-        if dtype is None:
-            assert self_dtype is not None
-            dtype = self_dtype
         if use_gpu == curr_is_gpu and original_size >= new_size and self_dtype == dtype:
             # reusing existing data
             return self.reshape(shape=shape)

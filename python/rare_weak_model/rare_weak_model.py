@@ -20,7 +20,8 @@ def rare_weak_model(\
         offset_col0=0,\
         num_steps=num_steps,
         use_njit=use_njit)
-    modify_p_values_submatrix(p_values_inoutput = sorted_p_values_output, mu = mu, n1=n1, use_njit=use_njit)
+    modify_p_values_submatrix(p_values_inoutput = sorted_p_values_output,\
+                              mu = mu, n1=n1, use_njit=use_njit)
     if sort_labels:
         sort_and_count_labels_rows(sorted_p_values_inoutput=sorted_p_values_output,\
                                    cumulative_counts_output=cumulative_counts_output,\
@@ -31,8 +32,7 @@ def sort_and_count_labels_rows(\
         cumulative_counts_output: HybridArray,\
         n1: int|np.uint32,\
         use_njit: bool|None = None) -> None:
-    cumulative_counts_output.realloc(shape=sorted_p_values_inoutput.shape(),\
-                                     dtype=np.uint32, use_gpu=sorted_p_values_inoutput.is_gpu())
+    cumulative_counts_output.realloc(like=sorted_p_values_inoutput, dtype=np.uint32)
     n1 = np.uint32(n1)
     if sorted_p_values_inoutput.is_gpu():
         # GPU mode
