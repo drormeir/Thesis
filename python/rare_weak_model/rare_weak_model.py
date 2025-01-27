@@ -10,13 +10,14 @@ def rare_weak_model(\
         cumulative_counts_output: HybridArray,\
         mu: float|np.float64,\
         n1: int|np.uint32,\
+        ind_model: int|np.uint32 = 0,\
         num_steps: int|np.uint32|None=None,\
         use_njit: bool|None = None,
         sort_labels: bool = True) -> None:
     sorted_p_values_output.astype(np.float64)
     random_p_values_matrix(\
         p_values_output = sorted_p_values_output,\
-        offset_row0=0,\
+        offset_row0= np.uint32(ind_model) * sorted_p_values_output.nrows(),\
         offset_col0=0,\
         num_steps=num_steps,
         use_njit=use_njit)
