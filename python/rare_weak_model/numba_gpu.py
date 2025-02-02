@@ -32,7 +32,7 @@ else:
 
     @numba.cuda.jit(device=False)
     def random_modified_p_values_matrix_gpu(num_steps: np.uint32, offset_row0: np.uint32, offset_col0: np.uint32, mu: np.float64, out: DeviceNDArray) -> None:
-        norm_factor = 1.0 / np.float64(2.0**64)
+        norm_factor = np.float64(1.0) / np.float64(2.0**64)
         # Get the 2D indices of the current thread within the grid
         ind_row0, ind_col0 = numba.cuda.grid(2) # type: ignore
         # Calculate the strides
@@ -42,7 +42,7 @@ else:
             seed_row = (np.uint64(offset_row0 + ind_row) << np.uint64(32)) + offset_col0
             for ind_col in range(ind_col0, out.shape[1], col_stride):
                 rand_int = random_integer_gpu(seed_row + np.uint64(ind_col), num_steps)
-                p_value = (rand_int + 0.5) * norm_factor
+                p_value = (rand_int + np.float64(0.5)) * norm_factor
                 isf = standard_normal_isf_newton_gpu(p_value)
                 out_row[ind_col] = standard_normal_sf_gpu(isf + mu)
 
@@ -60,7 +60,7 @@ else:
 
     @numba.cuda.jit(device=False)
     def random_p_values_matrix_gpu(num_steps: np.uint32, offset_row0: np.uint32, offset_col0: np.uint32, out: DeviceNDArray) -> None:
-        norm_factor = 1.0 / np.float64(2.0**64)
+        norm_factor = np.float64(1.0) / np.float64(2.0**64)
         # Get the 2D indices of the current thread within the grid
         ind_row0, ind_col0 = numba.cuda.grid(2) # type: ignore
         # Calculate the strides
@@ -70,11 +70,11 @@ else:
             seed_row = (np.uint64(offset_row0 + ind_row) << np.uint64(32)) + offset_col0
             for ind_col in range(ind_col0, out.shape[1], col_stride):
                 rand_int = random_integer_gpu(seed_row + np.uint64(ind_col), num_steps)
-                out_row[ind_col] = (rand_int + 0.5) * norm_factor
+                out_row[ind_col] = (rand_int + np.float64(0.5)) * norm_factor
 
     @numba.cuda.jit(device=False)
     def random_p_values_series_gpu(seed: np.uint64, out: DeviceNDArray) -> None:
-        norm_factor = 1.0 / np.float64(2.0**64)
+        norm_factor = np.float64(1.0) / np.float64(2.0**64)
         s0, s1 = random_integer_base_states_gpu(seed)
         num_steps = out.size
         ind_start = numba.cuda.grid(1) # type: ignore
@@ -82,7 +82,7 @@ else:
         for i in range(ind_start, num_steps, ind_stride):
             s0, s1 = random_integer_states_transition_gpu(s0, s1)
             rand_int = random_integer_result_gpu(s0, s1)
-            out[i] = (rand_int + 0.5) * norm_factor
+            out[i] = (rand_int + np.float64(0.5)) * norm_factor
 
 
     @numba.cuda.jit(device=True)
@@ -120,19 +120,19 @@ else:
         Classic Abramowitz & Stegun approximation (formula 26.2.23).
         """
         # Coefficients, can not use lists in numba.cuda
-        c0, c1, c2 = 2.515517, 0.802853, 0.010328
-        d0, d1, d2 = 1.432788, 0.189269, 0.001308
-
+        c0, c1, c2 = np.float64(2.515517), np.float64(0.802853), np.float64(0.010328)
+        d0, d1, d2 = np.float64(1.432788), np.float64(0.189269), np.float64(0.001308)
+        one = np.float64(1.0)
         if p > 0.5:
-            q = 1-p
-            f = np.float64(-1.0)
+            q = one-p
+            f = -one
         else:
             q = p
-            f = np.float64(+1.0)
-        t = math.sqrt(-2.0 * math.log(q))
+            f = one
+        t = math.sqrt(np.float64(-2.0) * math.log(q))
 
         numerator = (c2*t + c1)*t + c0
-        denominator = ((d2*t + d1)*t + d0)*t + np.float64(1.0)
+        denominator = ((d2*t + d1)*t + d0)*t + one
         return f*(t - numerator / denominator)
 
 
@@ -153,6 +153,6 @@ else:
         This is -phi(z), where phi(z) is the standard normal PDF.
         """
         # phi(z) = 1/sqrt(2π) * exp(-z^2/2)
-        pdf_z = math.exp(-0.5 * z*z) / math.sqrt(2.0 * math.pi)
+        pdf_z = math.exp(np.float64(-0.5) * z*z) / math.sqrt(np.float64(2.0) * np.float64(math.pi))
         return -np.float64(pdf_z)
 

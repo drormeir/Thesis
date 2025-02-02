@@ -1,4 +1,3 @@
-import numpy as np
 from python.hpc import globals, raise_njit_not_available
 
 if not globals.cpu_njit_num_threads:
@@ -8,6 +7,7 @@ if not globals.cpu_njit_num_threads:
     def random_integers_series_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
 else:
+    import numpy as np
     import numba
 
     @numba.njit(parallel=True)

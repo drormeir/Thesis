@@ -48,17 +48,17 @@ else:
     def random_p_values_matrix_cpu_njit(num_steps: np.uint32, offset_row0: np.uint32, offset_col0: np.uint32, out: np.ndarray) -> None:
         out_uint64 = np.empty_like(out, dtype=np.uint64)
         random_integers_matrix_cpu_njit(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=out_uint64)
-        out[:] = (out_uint64+0.5) / np.float64(2.0**64)
+        out[:] = (out_uint64+np.float64(0.5)) / np.float64(2.0**64)
 
     @numba.njit(parallel=False)
     def random_p_values_series_cpu_njit(seed: np.uint64, out: np.ndarray) -> None:
-        norm_factor = 1.0 / np.float64(2.0**64)
+        norm_factor = np.float64(1.0) / np.float64(2.0**64)
         s0, s1 = random_integer_base_states_cpu_njit(seed=seed)
         num_steps = out.size
         for i in range(num_steps):
             s0, s1 = random_integer_states_transition_cpu_njit(s0, s1)
             rand_int = random_integer_result_cpu_njit(s0, s1)
-            out[i] = (rand_int + 0.5) * norm_factor
+            out[i] = (rand_int + np.float64(0.5)) * norm_factor
 
     @numba.njit(parallel=False)
     def standard_normal_isf_newton_cpu_njit(p: np.float64) -> np.float64:
@@ -94,18 +94,18 @@ else:
         Classic Abramowitz & Stegun approximation (formula 26.2.23).
         """
         # Coefficients
-        c = [2.515517, 0.802853, 0.010328]
-        d = [1.432788, 0.189269, 0.001308]
-
-        if p > 0.5:
-            q = 1 - p
-            f = np.float64(-1.0)
+        c = [np.float64(2.515517), np.float64(0.802853), np.float64(0.010328)]
+        d = [np.float64(1.432788), np.float64(0.189269), np.float64(0.001308)]
+        one = np.float64(1.0)
+        if p > np.float64(0.5):
+            q = one - p
+            f = -one
         else:
             q = p
-            f = np.float64(+1.0)
-        t = math.sqrt(-2.0 * math.log(q))
+            f = one
+        t = math.sqrt(-np.float64(2.0) * math.log(q))
         numerator = (c[2]*t + c[1])*t + c[0]
-        denominator = ((d[2]*t + d[1])*t + d[0])*t + np.float64(1.0)
+        denominator = ((d[2]*t + d[1])*t + d[0])*t + one
         return f*(t - numerator / denominator)
 
 
@@ -126,5 +126,5 @@ else:
         This is -phi(z), where phi(z) is the standard normal PDF.
         """
         # phi(z) = 1/sqrt(2π) * exp(-z^2/2)
-        pdf_z = math.exp(-0.5 * z*z) / math.sqrt(2.0 * math.pi)
+        pdf_z = math.exp(np.float64(-0.5) * z*z) / math.sqrt(np.float64(2.0) * np.float64(math.pi))
         return -np.float64(pdf_z)
