@@ -446,6 +446,12 @@ class HybridArray:
         assert isinstance(self.data, DeviceNDArray)
         return self.data
     
+    def gpu_grid_block_shapes(self) -> tuple[tuple, tuple]:
+        return simple_data_size_to_grid_block_2D(self.shape())
+    
+    def rows_gpu_grid_block_shapes(self) -> tuple[np.uint32, np.uint32]:
+        return simple_data_size_to_grid_block_1D(self.nrows())
+
 
 def simple_data_size_to_grid_block_2D(data_shape: HybridArray|tuple[int]|tuple[np.uint32]|tuple[np.uint64]) -> tuple[tuple, tuple]:
     if isinstance(data_shape, HybridArray):

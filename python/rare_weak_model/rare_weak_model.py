@@ -1,5 +1,5 @@
 import numpy as np
-from python.hpc import globals, raise_cuda_not_available, raise_njit_not_available, simple_data_size_to_grid_block_2D, HybridArray
+from python.hpc import globals, raise_cuda_not_available, raise_njit_not_available, HybridArray
 from python.rare_weak_model.python_native import random_p_values_matrix_py, random_p_values_series_py, random_modified_p_values_matrix_py, modify_p_values_matrix_py, sort_and_count_labels_rows_py
 from python.rare_weak_model.numba_cpu import random_p_values_matrix_cpu_njit, random_p_values_series_cpu_njit, random_modified_p_values_matrix_cpu_njit, modify_p_values_matrix_cpu_njit, sort_and_count_labels_rows_cpu_njit
 from python.rare_weak_model.numba_gpu import random_p_values_matrix_gpu, random_p_values_series_gpu, random_modified_p_values_matrix_gpu, modify_p_values_matrix_gpu, sort_and_count_labels_rows_gpu
@@ -62,7 +62,7 @@ def random_modified_p_values_matrix(\
     mu = np.float64(mu)
     if p_values_output.is_gpu():
         # GPU mode
-        grid_shape, block_shape = simple_data_size_to_grid_block_2D(p_values_output.shape())
+        grid_shape, block_shape = p_values_output.gpu_grid_block_shapes()
         random_modified_p_values_matrix_gpu[grid_shape, block_shape](num_steps, offset_row0, offset_col0, mu, p_values_output.gpu_data()) # type: ignore
     else:
         # CPU mode
@@ -85,7 +85,7 @@ def modify_p_values_submatrix(\
     mu = np.float64(mu)
     if data.is_gpu():
         # GPU mode
-        grid_shape, block_shape = simple_data_size_to_grid_block_2D(data.shape())
+        grid_shape, block_shape = data.gpu_grid_block_shapes()
         modify_p_values_matrix_gpu[grid_shape, block_shape](data.gpu_data(), mu) # type: ignore
     else:
         # CPU mode
@@ -106,7 +106,7 @@ def random_p_values_matrix(p_values_output: HybridArray,\
     num_steps = random_num_steps(num_steps)
     if p_values_output.is_gpu():
         # GPU mode
-        grid_shape, block_shape = simple_data_size_to_grid_block_2D(p_values_output.shape())
+        grid_shape, block_shape = p_values_output.gpu_grid_block_shapes()
         random_p_values_matrix_gpu[grid_shape, block_shape](num_steps, offset_row0, offset_col0, p_values_output.gpu_data()) # type: ignore
     else:
         # CPU mode
