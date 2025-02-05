@@ -7,12 +7,14 @@ globals = SimpleNamespace(
     numba_import_success = False,
     cpu_njit_num_threads = np.uint32(0),
     cuda_available = False,
-    max_threads_per_block = np.uint32(0),
-    min_grid_size = np.uint32(0),
-    warp_size = np.uint32(0),
+    max_threads_per_block = np.uint32(1),
+    min_grid_size = np.uint32(1),
+    warp_size = np.uint32(32),
     grid_block_shape_debug = np.uint32(0),
-    max_registers_per_block = np.uint32(0)
+    max_registers_per_block = np.uint32(1),
 )
+# Now add the lambda function (after globals is fully created)
+globals.get_min_registers_per_block = lambda: globals.max_registers_per_block // globals.max_threads_per_block
 
 try:
     import numba
@@ -422,6 +424,10 @@ class HybridArray:
         assert self.data is not None
         return np.uint32(self.data.shape[0])
     
+    def ncols(self) -> np.uint32:
+        assert self.data is not None
+        return np.uint32(self.data.shape[1])
+    
     def is_gpu(self) -> bool:
         # In case nothing is allocated yet, this function returns default: False
         return self.original_numba_data is not None
@@ -448,7 +454,7 @@ class HybridArray:
         assert isinstance(self.data, DeviceNDArray)
         return self.data
     
-    def gpu_grid_block_shapes(self, registers_per_thread: int = 1, debug: int|None = None) -> tuple[tuple, tuple]:
+    def gpu_grid_block_shapes(self, registers_per_thread: int|None = None, debug: int|None = None) -> tuple[tuple, tuple]:
         return simple_data_size_to_grid_block_2D(self.shape(), registers_per_thread=registers_per_thread, debug=debug)
     
     def rows_gpu_grid_block_shapes(self) -> tuple[np.uint32, np.uint32]:
@@ -456,7 +462,7 @@ class HybridArray:
 
 
 def simple_data_size_to_grid_block_2D(data_shape: HybridArray|tuple[int]|tuple[np.uint32]|tuple[np.uint64],\
-                                      registers_per_thread: int = 1,\
+                                      registers_per_thread: int|None = None,\
                                       debug: int|None = None) -> tuple[tuple, tuple]:
     if isinstance(data_shape, HybridArray):
         data_shape = data_shape.shape()
@@ -464,20 +470,19 @@ def simple_data_size_to_grid_block_2D(data_shape: HybridArray|tuple[int]|tuple[n
         debug = globals.grid_block_shape_debug
     if len(data_shape) != 2:
         raise ValueError("This function only supports 2D data.")
-
-    grid_shape_y, block_shape_y = simple_data_size_to_grid_block_1D(data_shape[0], suggested_block_size=1, debug=debug-1)
-    grid_shape_x, block_shape_x = simple_data_size_to_grid_block_1D(data_shape[1], suggested_block_size=globals.max_threads_per_block, debug=debug-1)
-    block_size = block_shape_x * block_shape_y
-    max_threads_per_block = min([block_size,globals.max_registers_per_block // registers_per_thread, globals.max_threads_per_block])
-    block_warp = block_size_to_warp(data_size=max_threads_per_block, block_size=block_size)
-    if block_warp < block_size:
-        if debug > 0:
-            print(f'Trying to reduce block_shape=({block_shape_y},{block_shape_x}) to {block_warp=} requirements.')
-        # priority to reduce rows per block over columns
-        block_shape_y = min(np.uint32(np.sqrt(block_warp)),data_shape[0])
-        block_shape_x = block_warp // block_shape_y
-        grid_shape_y = (data_shape[0] + block_shape_y - 1) // block_shape_y
-        grid_shape_x = (data_shape[1] + block_shape_x - 1) // block_shape_x
+    if registers_per_thread is None:
+        registers_per_thread = globals.get_min_registers_per_block()
+    else:
+        assert registers_per_thread > 0
+    data_size = data_shape[0]*data_shape[1]
+    max_threads_per_block = min(globals.max_registers_per_block // registers_per_thread,\
+                                globals.max_threads_per_block)
+    block_size = block_size_to_warp(data_size=data_size, block_size=max_threads_per_block)
+    # priority to reduce rows per block over columns
+    block_shape_y = min(np.uint32(np.sqrt(block_size)),data_shape[0])
+    block_shape_x = block_size // block_shape_y
+    grid_shape_y = (data_shape[0] + block_shape_y - 1) // block_shape_y
+    grid_shape_x = (data_shape[1] + block_shape_x - 1) // block_shape_x
     grid_shape = (grid_shape_y, grid_shape_x)
     block_shape = (block_shape_y, block_shape_x)
     if debug > 0:

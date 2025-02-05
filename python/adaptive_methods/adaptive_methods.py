@@ -7,8 +7,6 @@ from python.adaptive_methods.python_native import higher_criticism_stable_py, hi
 
 def higher_criticism_stable(\
         sorted_p_values_input_output: HybridArray,\
-        num_discoveries_output: HybridArray,\
-        discover_method: str = 'argmin',\
         use_njit: bool|None = None) -> None:
     if sorted_p_values_input_output.is_gpu():
         # GPU mode
@@ -20,15 +18,9 @@ def higher_criticism_stable(\
             higher_criticism_stable_cpu_njit(sorted_p_values_input_output=sorted_p_values_input_output.numpy())
         else:
             higher_criticism_stable_py(sorted_p_values_input_output=sorted_p_values_input_output.numpy())
-    discover_by_method(transformed_p_values_input=sorted_p_values_input_output,\
-                        num_discoveries_output=num_discoveries_output,\
-                        discover_method=discover_method,\
-                        use_njit=use_njit)
 
 def higher_criticism_unstable(\
         sorted_p_values_input_output: HybridArray,\
-        num_discoveries_output: HybridArray,\
-        discover_method: str = 'argmin',\
         use_njit: bool|None = None) -> None:
     if sorted_p_values_input_output.is_gpu():
         # GPU mode
@@ -40,16 +32,10 @@ def higher_criticism_unstable(\
             higher_criticism_unstable_cpu_njit(sorted_p_values_input_output=sorted_p_values_input_output.numpy())
         else:
             higher_criticism_unstable_py(sorted_p_values_input_output=sorted_p_values_input_output.numpy())
-    discover_by_method(transformed_p_values_input=sorted_p_values_input_output,\
-                        num_discoveries_output=num_discoveries_output,\
-                        discover_method=discover_method,\
-                        use_njit=use_njit)
 
 
 def berk_jones(\
         sorted_p_values_input_output: HybridArray,\
-        num_discoveries_output: HybridArray,\
-        discover_method: str = 'argmin',\
         use_njit: bool|None = None,\
         grid_block_shape_debug: int|None = None) -> None:
     if sorted_p_values_input_output.is_gpu():
@@ -65,10 +51,6 @@ def berk_jones(\
             berk_jones_cpu_njit(sorted_p_values_input_output=sorted_p_values_input_output.numpy())
         else:
             berk_jones_py(sorted_p_values_input_output=sorted_p_values_input_output.numpy())
-    discover_by_method(transformed_p_values_input=sorted_p_values_input_output,\
-                        num_discoveries_output=num_discoveries_output,\
-                        discover_method=discover_method,\
-                        use_njit=use_njit)
 
 def discover_by_method(\
         transformed_p_values_input: HybridArray,\
