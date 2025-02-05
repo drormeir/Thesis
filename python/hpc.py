@@ -13,8 +13,6 @@ globals = SimpleNamespace(
     grid_block_shape_debug = np.uint32(0),
     max_registers_per_block = np.uint32(1),
 )
-# Now add the lambda function (after globals is fully created)
-globals.get_min_registers_per_block = lambda: globals.max_registers_per_block // globals.max_threads_per_block
 
 try:
     import numba
@@ -460,6 +458,8 @@ class HybridArray:
     def rows_gpu_grid_block_shapes(self) -> tuple[np.uint32, np.uint32]:
         return simple_data_size_to_grid_block_1D(self.nrows())
 
+    def cols_gpu_grid_block_shapes(self) -> tuple[np.uint32, np.uint32]:
+        return simple_data_size_to_grid_block_1D(self.ncols())
 
 def simple_data_size_to_grid_block_2D(data_shape: HybridArray|tuple[int]|tuple[np.uint32]|tuple[np.uint64],\
                                       registers_per_thread: int|None = None,\
@@ -470,14 +470,8 @@ def simple_data_size_to_grid_block_2D(data_shape: HybridArray|tuple[int]|tuple[n
         debug = globals.grid_block_shape_debug
     if len(data_shape) != 2:
         raise ValueError("This function only supports 2D data.")
-    if registers_per_thread is None:
-        registers_per_thread = globals.get_min_registers_per_block()
-    else:
-        assert registers_per_thread > 0
     data_size = data_shape[0]*data_shape[1]
-    max_threads_per_block = min(globals.max_registers_per_block // registers_per_thread,\
-                                globals.max_threads_per_block)
-    block_size = block_size_to_warp(data_size=data_size, block_size=max_threads_per_block)
+    block_size = calc_block_size(data_size=data_size, registers_per_thread=registers_per_thread)
     # priority to reduce rows per block over columns
     block_shape_y = min(np.uint32(np.sqrt(block_size)),data_shape[0])
     block_shape_x = block_size // block_shape_y
@@ -491,49 +485,33 @@ def simple_data_size_to_grid_block_2D(data_shape: HybridArray|tuple[int]|tuple[n
 
 def simple_data_size_to_grid_block_1D(\
         data_size: int|np.uint64|np.uint32,\
-        suggested_block_size: int|np.uint32 = 0,\
-        suggested_grid_size: int|np.uint32 = 0,\
+        registers_per_thread: int|None = None,\
         debug: int|None = None) -> tuple[np.uint32, np.uint32]:
     if not globals.cuda_available:
         raise_cuda_not_available()  
     if debug is None:
         debug = int(globals.grid_block_shape_debug)
-    if suggested_grid_size:
-        grid_size = max(np.uint32(suggested_grid_size), globals.min_grid_size)
-        max_block_size = (data_size + grid_size - 1) // grid_size
-        block_size = block_size_to_warp(data_size=max_block_size, block_size=max_block_size)
-        if block_size < max_block_size:
-            return simple_data_size_to_grid_block_1D(\
-                data_size=data_size, suggested_block_size=block_size, debug=debug)
-        if debug > 0:
-            print(f'simple_data_size_to_grid_block_1D({data_size=}) --> {grid_size=} {block_size=}')
-        return grid_size, block_size
-    if suggested_block_size:
-        block_size = block_size_to_warp(data_size=data_size, block_size=suggested_block_size)
-        grid_size = (data_size + block_size - 1) // block_size
-        return simple_data_size_to_grid_block_1D(\
-            data_size=data_size,\
-        suggested_block_size=block_size,\
-        suggested_grid_size=grid_size,\
-        debug=debug)
-    return simple_data_size_to_grid_block_1D(\
-        data_size=data_size,\
-        suggested_block_size=globals.max_threads_per_block,\
-        debug=debug)
+    block_size = calc_block_size(data_size=data_size, registers_per_thread=registers_per_thread)
+    grid_size = np.uint32((data_size + block_size - 1) // block_size)
+    if debug > 0:
+        print(f'simple_data_size_to_grid_block_1D({data_size=}) --> {grid_size=} {block_size=}')
+    return grid_size, block_size
 
-def block_size_to_warp(data_size: int|np.uint32|np.uint64,\
-                       block_size: int|np.uint32|np.uint64) -> np.uint32:
+def calc_block_size(data_size: int|np.uint64|np.uint32,\
+                    registers_per_thread: int|np.uint64|np.uint32|None = None) -> np.uint32:
     if not globals.cuda_available:
         raise_cuda_not_available()    
-    if block_size > globals.max_threads_per_block:
-        block_size = globals.max_threads_per_block
-    elif block_size < globals.warp_size:
-        block_size = globals.warp_size
-    else:
+    assert data_size > 0
+    max_threads_per_block = [globals.max_threads_per_block, data_size]
+    if registers_per_thread is not None:
+        assert registers_per_thread > 0
+        max_threads_per_block.append(globals.max_registers_per_block // registers_per_thread)
+    block_size = min(max_threads_per_block)
+    if block_size > globals.warp_size:
         block_size -= block_size % globals.warp_size
-    if block_size >= data_size:
-        block_size = data_size
+    assert block_size > 0
     return np.uint32(block_size)
+
 
 
 ############################################################3
