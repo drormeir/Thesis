@@ -9,7 +9,9 @@ globals = SimpleNamespace(
     cuda_available = False,
     max_threads_per_block = np.uint32(0),
     min_grid_size = np.uint32(0),
-    warp_size = np.uint32(0)
+    warp_size = np.uint32(0),
+    grid_block_shape_debug = np.uint32(0),
+    max_registers_per_block = np.uint32(0)
 )
 
 try:
@@ -142,7 +144,7 @@ def print_cuda_device_attributes():
     globals.max_threads_per_block = device.MAX_THREADS_PER_BLOCK
     globals.warp_size             = device.WARP_SIZE
     max_shared_memory_per_block   = device.MAX_SHARED_MEMORY_PER_BLOCK
-    max_registers_per_block       = device.MAX_REGISTERS_PER_BLOCK
+    globals.max_registers_per_block = device.MAX_REGISTERS_PER_BLOCK
     memory_bus_width_bits         = device.GLOBAL_MEMORY_BUS_WIDTH
     total_constant_memory         = device.TOTAL_CONSTANT_MEMORY
     memory_clock_rate_MHz         = device.MEMORY_CLOCK_RATE/1000 # from KHz to MHz
@@ -166,7 +168,7 @@ def print_cuda_device_attributes():
     print(f'    Maximum threads per block:          {globals.max_threads_per_block}')
     print(f'    Warp size:                          {globals.warp_size}')
     print(f'    Maximum shared memory per block:    {max_shared_memory_per_block} [bytes]')
-    print(f'    Maximum registers per block:        {max_registers_per_block}')
+    print(f'    Maximum registers per block:        {globals.max_registers_per_block}')
     print(f'    Total constant memory:              {total_constant_memory} [bytes]')
     print(f'    Asynchronous engine count:          {device.ASYNC_ENGINE_COUNT}')
     print(f'    L2 cache size:                      {device.L2_CACHE_SIZE} [bytes]')
@@ -446,49 +448,76 @@ class HybridArray:
         assert isinstance(self.data, DeviceNDArray)
         return self.data
     
-    def gpu_grid_block_shapes(self) -> tuple[tuple, tuple]:
-        return simple_data_size_to_grid_block_2D(self.shape())
+    def gpu_grid_block_shapes(self, registers_per_thread: int = 1, debug: int|None = None) -> tuple[tuple, tuple]:
+        return simple_data_size_to_grid_block_2D(self.shape(), registers_per_thread=registers_per_thread, debug=debug)
     
     def rows_gpu_grid_block_shapes(self) -> tuple[np.uint32, np.uint32]:
         return simple_data_size_to_grid_block_1D(self.nrows())
 
 
-def simple_data_size_to_grid_block_2D(data_shape: HybridArray|tuple[int]|tuple[np.uint32]|tuple[np.uint64]) -> tuple[tuple, tuple]:
+def simple_data_size_to_grid_block_2D(data_shape: HybridArray|tuple[int]|tuple[np.uint32]|tuple[np.uint64],\
+                                      registers_per_thread: int = 1,\
+                                      debug: int|None = None) -> tuple[tuple, tuple]:
     if isinstance(data_shape, HybridArray):
         data_shape = data_shape.shape()
+    if debug is None:
+        debug = globals.grid_block_shape_debug
     if len(data_shape) != 2:
         raise ValueError("This function only supports 2D data.")
 
-    grid_shape_y, block_shape_y = simple_data_size_to_grid_block_1D(data_shape[0], suggested_block_size=1)
-    grid_shape_x, block_shape_x = simple_data_size_to_grid_block_1D(data_shape[1], suggested_block_size=globals.max_threads_per_block)
-
+    grid_shape_y, block_shape_y = simple_data_size_to_grid_block_1D(data_shape[0], suggested_block_size=1, debug=debug-1)
+    grid_shape_x, block_shape_x = simple_data_size_to_grid_block_1D(data_shape[1], suggested_block_size=globals.max_threads_per_block, debug=debug-1)
+    block_size = block_shape_x * block_shape_y
+    max_threads_per_block = min([block_size,globals.max_registers_per_block // registers_per_thread, globals.max_threads_per_block])
+    block_warp = block_size_to_warp(data_size=max_threads_per_block, block_size=block_size)
+    if block_warp < block_size:
+        if debug > 0:
+            print(f'Trying to reduce block_shape=({block_shape_y},{block_shape_x}) to {block_warp=} requirements.')
+        # priority to reduce rows per block over columns
+        block_shape_y = min(np.uint32(np.sqrt(block_warp)),data_shape[0])
+        block_shape_x = block_warp // block_shape_y
+        grid_shape_y = (data_shape[0] + block_shape_y - 1) // block_shape_y
+        grid_shape_x = (data_shape[1] + block_shape_x - 1) // block_shape_x
     grid_shape = (grid_shape_y, grid_shape_x)
     block_shape = (block_shape_y, block_shape_x)
-
+    if debug > 0:
+        print(f'simple_data_size_to_grid_block_2D(shape={data_shape}) --> grid={grid_shape}  block={block_shape}', flush=True)
     return grid_shape, block_shape    
 
-def simple_data_size_to_grid_block_1D(data_size: int|np.uint64|np.uint32,\
-                                   suggested_block_size: int|np.uint32 = 0,
-                                   suggested_grid_size: int|np.uint32 = 0,
-                                   ) -> tuple[np.uint32, np.uint32]:
+def simple_data_size_to_grid_block_1D(\
+        data_size: int|np.uint64|np.uint32,\
+        suggested_block_size: int|np.uint32 = 0,\
+        suggested_grid_size: int|np.uint32 = 0,\
+        debug: int|None = None) -> tuple[np.uint32, np.uint32]:
     if not globals.cuda_available:
-        raise_cuda_not_available()    
+        raise_cuda_not_available()  
+    if debug is None:
+        debug = int(globals.grid_block_shape_debug)
     if suggested_grid_size:
         grid_size = max(np.uint32(suggested_grid_size), globals.min_grid_size)
         max_block_size = (data_size + grid_size - 1) // grid_size
         block_size = block_size_to_warp(data_size=max_block_size, block_size=max_block_size)
         if block_size < max_block_size:
-            return simple_data_size_to_grid_block_1D(data_size=data_size, suggested_block_size=block_size)
+            return simple_data_size_to_grid_block_1D(\
+                data_size=data_size, suggested_block_size=block_size, debug=debug)
+        if debug > 0:
+            print(f'simple_data_size_to_grid_block_1D({data_size=}) --> {grid_size=} {block_size=}')
         return grid_size, block_size
     if suggested_block_size:
         block_size = block_size_to_warp(data_size=data_size, block_size=suggested_block_size)
         grid_size = (data_size + block_size - 1) // block_size
-        return simple_data_size_to_grid_block_1D(data_size=data_size,
-                                              suggested_block_size=block_size,
-                                              suggested_grid_size=grid_size)
-    return simple_data_size_to_grid_block_1D(data_size=data_size, suggested_block_size=globals.max_threads_per_block)
+        return simple_data_size_to_grid_block_1D(\
+            data_size=data_size,\
+        suggested_block_size=block_size,\
+        suggested_grid_size=grid_size,\
+        debug=debug)
+    return simple_data_size_to_grid_block_1D(\
+        data_size=data_size,\
+        suggested_block_size=globals.max_threads_per_block,\
+        debug=debug)
 
-def block_size_to_warp(data_size: int|np.uint32|np.uint64, block_size: int|np.uint32) -> np.uint32:
+def block_size_to_warp(data_size: int|np.uint32|np.uint64,\
+                       block_size: int|np.uint32|np.uint64) -> np.uint32:
     if not globals.cuda_available:
         raise_cuda_not_available()    
     if block_size > globals.max_threads_per_block:
@@ -498,7 +527,7 @@ def block_size_to_warp(data_size: int|np.uint32|np.uint64, block_size: int|np.ui
     else:
         block_size -= block_size % globals.warp_size
     if block_size >= data_size:
-        return np.uint32(data_size)
+        block_size = data_size
     return np.uint32(block_size)
 
 
