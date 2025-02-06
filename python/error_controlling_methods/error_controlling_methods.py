@@ -10,7 +10,7 @@ def topk(sorted_p_values_input: HybridArray,\
     num_discoveries_output.realloc(like=sorted_p_values_input, dtype=np.uint32)
     if num_discoveries_output.is_gpu():
         # GPU mode
-        grid_shape, block_shape = num_discoveries_output.rows_gpu_grid_block_shapes()
+        grid_shape, block_shape = num_discoveries_output.gpu_grid_block1D_rows_shapes()
         topk_gpu[grid_shape, block_shape](sorted_p_values_input.gpu_data(), num_discoveries_output.gpu_data()) # type: ignore
     else:
         # CPU mode
@@ -28,7 +28,7 @@ def bonferroni(sorted_p_values_input: HybridArray,\
     num_discoveries_output.realloc(like=sorted_p_values_input, dtype=np.uint32)
     if num_discoveries_output.is_gpu():
         # GPU mode
-        grid_shape, block_shape = num_discoveries_output.rows_gpu_grid_block_shapes()
+        grid_shape, block_shape = num_discoveries_output.gpu_grid_block1D_rows_shapes()
         bonferroni_gpu[grid_shape, block_shape](sorted_p_values_input.gpu_data(), num_discoveries_output.gpu_data()) # type: ignore
     else:
         # CPU mode
@@ -45,7 +45,7 @@ def benjamini_hochberg(sorted_p_values_input: HybridArray,\
     num_discoveries_output.realloc(like=sorted_p_values_input, dtype=np.uint32)
     if num_discoveries_output.is_gpu():
                 # GPU mode
-        grid_shape, block_shape = num_discoveries_output.rows_gpu_grid_block_shapes()
+        grid_shape, block_shape = num_discoveries_output.gpu_grid_block1D_rows_shapes()
         benjamini_hochberg_gpu[grid_shape, block_shape](sorted_p_values_input.gpu_data(), num_discoveries_output.gpu_data()) # type: ignore
     else:
         # CPU mode

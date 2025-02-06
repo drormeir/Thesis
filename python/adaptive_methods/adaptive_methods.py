@@ -10,7 +10,7 @@ def higher_criticism_stable(\
         use_njit: bool|None = None) -> None:
     if sorted_p_values_input_output.is_gpu():
         # GPU mode
-        grid_shape, block_shape = sorted_p_values_input_output.gpu_grid_block_shapes()
+        grid_shape, block_shape = sorted_p_values_input_output.gpu_grid_block2D_square_shapes()
         higher_criticism_stable_gpu[grid_shape, block_shape](sorted_p_values_input_output.gpu_data()) # type: ignore
     else:
         # CPU mode
@@ -24,7 +24,7 @@ def higher_criticism_unstable(\
         use_njit: bool|None = None) -> None:
     if sorted_p_values_input_output.is_gpu():
         # GPU mode
-        grid_shape, block_shape = sorted_p_values_input_output.gpu_grid_block_shapes()
+        grid_shape, block_shape = sorted_p_values_input_output.gpu_grid_block2D_square_shapes()
         higher_criticism_unstable_gpu[grid_shape, block_shape](sorted_p_values_input_output.gpu_data()) # type: ignore
     else:
         # CPU mode
@@ -41,7 +41,7 @@ def berk_jones(\
     if sorted_p_values_input_output.is_gpu():
         # GPU mode
         grid_shape, block_shape =\
-            sorted_p_values_input_output.gpu_grid_block_shapes(\
+            sorted_p_values_input_output.gpu_grid_block2D_square_shapes(\
                 debug=grid_block_shape_debug,\
                 registers_per_thread=256)
         berk_jones_gpu[grid_shape, block_shape](sorted_p_values_input_output.gpu_data()) # type: ignore
@@ -73,7 +73,7 @@ def discover_argmin(\
     num_discoveries_output.realloc(like=transformed_p_values_input, dtype=np.uint32)
     if transformed_p_values_input.is_gpu():
         # GPU mode
-        grid_shape, block_shape = transformed_p_values_input.rows_gpu_grid_block_shapes()
+        grid_shape, block_shape = transformed_p_values_input.gpu_grid_block1D_rows_shapes()
         discover_argmin_gpu[grid_shape, block_shape](transformed_p_values_input.gpu_data(), num_discoveries_output.gpu_data()) # type: ignore
     else:
         # CPU mode
@@ -93,7 +93,7 @@ def discover_dominant(\
     num_discoveries_output.realloc(like=transformed_p_values_input, dtype=np.uint32)
     if transformed_p_values_input.is_gpu():
         # GPU mode
-        grid_shape, block_shape = transformed_p_values_input.rows_gpu_grid_block_shapes()
+        grid_shape, block_shape = transformed_p_values_input.gpu_grid_block1D_rows_shapes()
         discover_dominant_gpu[grid_shape, block_shape](transformed_p_values_input.gpu_data(), num_discoveries_output.gpu_data()) # type: ignore
     else:
         # CPU mode

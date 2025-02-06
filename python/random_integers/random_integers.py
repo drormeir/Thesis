@@ -14,7 +14,7 @@ def random_integers_matrix(data: HybridArray, offset_row0: int|np.uint32, offset
     num_steps = random_num_steps(num_steps)
     if data.is_gpu():
         # GPU mode
-        grid_shape, block_shape = data.gpu_grid_block_shapes()
+        grid_shape, block_shape = data.gpu_grid_block2D_square_shapes()
         random_integers_matrix_gpu[grid_shape, block_shape](num_steps, offset_row0, offset_col0, data.data) # type: ignore
     else:
         # CPU mode
@@ -35,7 +35,7 @@ def splitmix64_matrix(states: np.ndarray,\
         # GPU mode
         out_states.realloc_like(states_array)
         out_z.realloc_like(states_array)
-        grid_shape, block_shape = states_array.gpu_grid_block_shapes()
+        grid_shape, block_shape = states_array.gpu_grid_block2D_square_shapes()
         splitmix64_matrix_gpu[grid_shape, block_shape](states_array.data, out_states.data, out_z.data) # type: ignore
     else:
         # CPU mode
@@ -60,7 +60,7 @@ def random_integers_base_states_matrix(\
         # GPU mode
         out_s0.realloc_like(seeds_array)
         out_s1.realloc_like(seeds_array)
-        grid_shape, block_shape = seeds_array.gpu_grid_block_shapes()
+        grid_shape, block_shape = seeds_array.gpu_grid_block2D_square_shapes()
         random_integer_base_states_matrix_gpu[grid_shape, block_shape](seeds_array.data, out_s0.data, out_s1.data) # type: ignore
     else:
         # CPU mode

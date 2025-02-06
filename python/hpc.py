@@ -452,36 +452,70 @@ class HybridArray:
         assert isinstance(self.data, DeviceNDArray)
         return self.data
     
-    def gpu_grid_block_shapes(self, registers_per_thread: int|None = None, debug: int|None = None) -> tuple[tuple, tuple]:
-        return simple_data_size_to_grid_block_2D(self.shape(), registers_per_thread=registers_per_thread, debug=debug)
+    def gpu_grid_block2D_square_shapes(self,\
+                                        registers_per_thread: int|None = None,\
+                                        debug: int|None = None) -> tuple[tuple, tuple]:
+        if not globals.cuda_available:
+            raise_cuda_not_available()
+        block_size = self.calc_block_size(registers_per_thread = registers_per_thread, debug = debug)
+        # priority to reduce rows per block over columns
+        block_shape_y = min(np.uint32(np.sqrt(block_size)),self.nrows())
+        block_shape_x = block_size // block_shape_y
+        return self.get_grid_from_2D_block(block_shape_y=block_shape_y, block_shape_x=block_shape_x, debug=debug)
     
-    def rows_gpu_grid_block_shapes(self) -> tuple[np.uint32, np.uint32]:
+    def gpu_grid_block2D_columns_shapes(self,\
+                              registers_per_thread: int|None = None,\
+                              debug: int|None = None) -> tuple[tuple, tuple]:
+        if not globals.cuda_available:
+            raise_cuda_not_available() 
+        block_size = self.calc_block_size(registers_per_thread = registers_per_thread,\
+                                          debug = debug)
+        nrows = self.nrows()
+        # priority to reduce rows per block over columns
+        if block_size <= nrows:
+            times = nrows // block_size
+            if nrows > times*block_size:
+                block_size = calc_block_size(nrows // (times+1))
+            block_shape_y = block_size
+            block_shape_x = 1
+        else:
+            block_shape_y = nrows
+            block_shape_x = block_size // block_shape_y
+        return self.get_grid_from_2D_block(block_shape_y=block_shape_y, block_shape_x=block_shape_x, debug=debug)
+    
+    def gpu_grid_block1D_rows_shapes(self) -> tuple[np.uint32, np.uint32]:
         return simple_data_size_to_grid_block_1D(self.nrows())
 
-    def cols_gpu_grid_block_shapes(self) -> tuple[np.uint32, np.uint32]:
+    def gpu_grid_block1D_cols_shapes(self) -> tuple[np.uint32, np.uint32]:
         return simple_data_size_to_grid_block_1D(self.ncols())
 
-def simple_data_size_to_grid_block_2D(data_shape: HybridArray|tuple[int]|tuple[np.uint32]|tuple[np.uint64],\
-                                      registers_per_thread: int|None = None,\
-                                      debug: int|None = None) -> tuple[tuple, tuple]:
-    if isinstance(data_shape, HybridArray):
-        data_shape = data_shape.shape()
-    if debug is None:
-        debug = globals.grid_block_shape_debug
-    if len(data_shape) != 2:
-        raise ValueError("This function only supports 2D data.")
-    data_size = data_shape[0]*data_shape[1]
-    block_size = calc_block_size(data_size=data_size, registers_per_thread=registers_per_thread)
-    # priority to reduce rows per block over columns
-    block_shape_y = min(np.uint32(np.sqrt(block_size)),data_shape[0])
-    block_shape_x = block_size // block_shape_y
-    grid_shape_y = (data_shape[0] + block_shape_y - 1) // block_shape_y
-    grid_shape_x = (data_shape[1] + block_shape_x - 1) // block_shape_x
-    grid_shape = (grid_shape_y, grid_shape_x)
-    block_shape = (block_shape_y, block_shape_x)
-    if debug > 0:
-        print(f'simple_data_size_to_grid_block_2D(shape={data_shape}) --> grid={grid_shape}  block={block_shape}', flush=True)
-    return grid_shape, block_shape    
+    def calc_block_size(self,
+                        registers_per_thread: int|None = None,\
+                        debug: int|None = None) -> np.uint32:
+        if not globals.cuda_available:
+            raise_cuda_not_available()  
+        if debug is None:
+            debug = int(globals.grid_block_shape_debug)
+        data_shape = self.shape()
+        data_size = data_shape[0]*data_shape[1]
+        block_size = calc_block_size(data_size=data_size, registers_per_thread=registers_per_thread)
+        if debug > 0:
+            print(f'{data_shape=} --> {block_size=}')
+        return block_size
+    
+    def get_grid_from_2D_block(self, block_shape_y, block_shape_x,\
+                               debug: int|None = None) -> tuple[tuple, tuple]:
+        data_shape = self.shape()
+        grid_shape_y = (data_shape[0] + block_shape_y - 1) // block_shape_y
+        grid_shape_x = (data_shape[1] + block_shape_x - 1) // block_shape_x
+        grid_shape = (grid_shape_y, grid_shape_x)
+        block_shape = (block_shape_y, block_shape_x)
+        if debug is None:
+            debug = int(globals.grid_block_shape_debug)
+        if debug > 0:
+            print(f'grid block shapes: {data_shape=} --> {grid_shape=}  {block_shape=}', flush=True)
+        return grid_shape, block_shape
+
 
 def simple_data_size_to_grid_block_1D(\
         data_size: int|np.uint64|np.uint32,\

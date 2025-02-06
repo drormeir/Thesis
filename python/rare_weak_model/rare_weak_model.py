@@ -62,7 +62,7 @@ def random_modified_p_values_matrix(\
     mu = np.float64(mu)
     if p_values_output.is_gpu():
         # GPU mode
-        grid_shape, block_shape = p_values_output.gpu_grid_block_shapes()
+        grid_shape, block_shape = p_values_output.gpu_grid_block2D_square_shapes()
         random_modified_p_values_matrix_gpu[grid_shape, block_shape](num_steps, offset_row0, offset_col0, mu, p_values_output.gpu_data()) # type: ignore
     else:
         # CPU mode
@@ -85,7 +85,7 @@ def modify_p_values_submatrix(\
     mu = np.float64(mu)
     if data.is_gpu():
         # GPU mode
-        grid_shape, block_shape = data.gpu_grid_block_shapes()
+        grid_shape, block_shape = data.gpu_grid_block2D_square_shapes()
         modify_p_values_matrix_gpu[grid_shape, block_shape](data.gpu_data(), mu) # type: ignore
     else:
         # CPU mode
@@ -106,7 +106,7 @@ def random_p_values_matrix(p_values_output: HybridArray,\
     num_steps = random_num_steps(num_steps)
     if p_values_output.is_gpu():
         # GPU mode
-        grid_shape, block_shape = p_values_output.gpu_grid_block_shapes()
+        grid_shape, block_shape = p_values_output.gpu_grid_block2D_square_shapes()
         random_p_values_matrix_gpu[grid_shape, block_shape](num_steps, offset_row0, offset_col0, p_values_output.gpu_data()) # type: ignore
     else:
         # CPU mode
