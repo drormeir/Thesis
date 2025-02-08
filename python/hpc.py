@@ -435,7 +435,14 @@ class HybridArray:
         return self.original_numba_data is None
     
     def dtype(self) -> type|None:
-        return self.data.dtype.type if self.data is not None else None
+        if self.original_numpy_data is not None:
+            return self.original_numpy_data.dtype
+        if self.original_numba_data is not None:
+            return self.original_numba_data.dtype
+        return None
+    
+    def is_empty(self) -> bool:
+        return self.original_numba_data is None and self.original_numpy_data is None
     
     def original_size(self) -> np.uint64:
         original_shape = self.original_shape()
@@ -451,7 +458,7 @@ class HybridArray:
     def gpu_data(self) -> DeviceNDArray:
         assert isinstance(self.data, DeviceNDArray)
         return self.data
-    
+        
     def gpu_grid_block2D_square_shapes(self,\
                                         registers_per_thread: int|None = None,\
                                         debug: int|None = None) -> tuple[tuple, tuple]:
@@ -471,14 +478,13 @@ class HybridArray:
         block_size = self.calc_block_size(registers_per_thread = registers_per_thread,\
                                           debug = debug)
         nrows = self.nrows()
-        # priority to reduce rows per block over columns
         if block_size <= nrows:
-            times = nrows // block_size
-            if nrows > times*block_size:
-                block_size = calc_block_size(nrows // (times+1))
-            block_shape_y = block_size
+            # small block less than a single column
+            times = (nrows + block_size-1) // block_size
+            block_shape_y = calc_block_size(nrows // times)
             block_shape_x = 1
         else:
+            # each block contains several columns
             block_shape_y = nrows
             block_shape_x = block_size // block_shape_y
         return self.get_grid_from_2D_block(block_shape_y=block_shape_y, block_shape_x=block_shape_x, debug=debug)
@@ -556,5 +562,5 @@ globals.cuda_available = init_cuda()
 
 if not globals.cuda_available:
     print("Numba or CUDA is not available. GPU operations will be disabled.")
-else:
+else:    
     print_cuda_device_attributes()

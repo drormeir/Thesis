@@ -1,7 +1,8 @@
-from python.hpc import globals, raise_cuda_not_available
+from python.hpc import globals
 
 if not globals.cpu_njit_num_threads:
     # Mock API
+    from python.hpc import raise_cuda_not_available
     def higher_criticism_stable_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
     def higher_criticism_unstable_gpu(**kwargs) -> None: # type: ignore

@@ -1,7 +1,8 @@
-from python.hpc import globals, raise_njit_not_available
+from python.hpc import globals
 
 if not globals.cpu_njit_num_threads:
     # Mock API
+    from python.hpc import raise_njit_not_available
     def random_modified_p_values_matrix_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
     def random_p_values_matrix_cpu_njit(**kwargs) -> None: # type: ignore

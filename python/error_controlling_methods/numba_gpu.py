@@ -1,7 +1,8 @@
-from python.hpc import globals, raise_cuda_not_available
+from python.hpc import globals
 
 if not globals.cuda_available:
     # Mock API
+    from python.hpc import raise_cuda_not_available
     def topk_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
     def bonferroni_gpu(**kwargs) -> None: # type: ignore
