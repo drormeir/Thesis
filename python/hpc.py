@@ -459,6 +459,12 @@ class HybridArray:
         assert isinstance(self.data, DeviceNDArray)
         return self.data
         
+    def select_row(self, i: int) -> None:
+        if self.original_numpy_data is not None:
+            self.data = self.original_numpy_data[i,:]
+        elif self.original_numba_data is not None:
+            self.data = self.original_numba_data[:,:]
+        
     def gpu_grid_block2D_square_shapes(self,\
                                         registers_per_thread: int|None = None,\
                                         debug: int|None = None) -> tuple[tuple, tuple]:
