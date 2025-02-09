@@ -3,6 +3,12 @@ from python.hpc import globals, raise_cuda_not_available, raise_njit_not_availab
 from python.array_math_utils.numba_gpu import array_transpose_gpu, sort_rows_inplace_gpu, average_rows_gpu
 from python.array_math_utils.numba_cpu import array_transpose_cpu_njit, average_rows_cpu_njit, sort_rows_inplace_cpu_njit
 
+def array_transpose_inplace(array: HybridArray, use_njit: bool|None = None) -> None:
+    work = HybridArray()
+    array_transpose(array=array, out=work, use_njit=use_njit)
+    array.swap(work)
+    work.close()
+    
 def array_transpose(array: HybridArray, out: HybridArray, use_njit: bool|None = None) -> None:
     if array.is_empty():
         return # clear output array???

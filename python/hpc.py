@@ -464,6 +464,11 @@ class HybridArray:
             self.data = self.original_numpy_data[i,:]
         elif self.original_numba_data is not None:
             self.data = self.original_numba_data[:,:]
+    
+    def swap(self, other: 'HybridArray') -> None:
+        self.original_numba_data, other.original_numba_data = other.original_numba_data, self.original_numba_data
+        self.original_numpy_data, other.original_numpy_data = other.original_numpy_data, self.original_numpy_data
+        self.data, other.data = other.data, self.data
         
     def gpu_grid_block2D_square_shapes(self,\
                                         registers_per_thread: int|None = None,\
