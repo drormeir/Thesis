@@ -4,7 +4,24 @@ from python.adaptive_methods.numba_gpu import higher_criticism_stable_gpu, highe
 from python.adaptive_methods.numba_cpu import higher_criticism_stable_cpu_njit, higher_criticism_unstable_cpu_njit, berk_jones_cpu_njit, discover_argmin_cpu_njit, discover_dominant_cpu_njit
 from python.adaptive_methods.python_native import higher_criticism_stable_py, higher_criticism_unstable_py, berk_jones_py, discover_argmin_py, discover_dominant_py
 
-
+def apply_transform_method(\
+        sorted_p_values_input_output: HybridArray,\
+        transform_method: str,\
+        use_njit: bool|None = None) -> None:
+    if transform_method == 'higher_criticism_stable':
+        higher_criticism_stable(\
+            sorted_p_values_input_output=sorted_p_values_input_output,\
+            use_njit=use_njit)
+    elif transform_method == 'higher_criticism_unstable':
+        higher_criticism_unstable(\
+            sorted_p_values_input_output=sorted_p_values_input_output,\
+            use_njit=use_njit)
+    elif transform_method == 'berk_jones':
+        berk_jones(sorted_p_values_input_output=sorted_p_values_input_output,\
+                   use_njit=use_njit)
+    else:
+        assert False, f'{transform_method=}'
+        
 def higher_criticism_stable(\
         sorted_p_values_input_output: HybridArray,\
         use_njit: bool|None = None) -> None:
