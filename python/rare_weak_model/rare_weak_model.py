@@ -5,6 +5,18 @@ from python.rare_weak_model.numba_cpu import random_p_values_matrix_cpu_njit, ra
 from python.rare_weak_model.numba_gpu import random_p_values_matrix_gpu, random_p_values_series_gpu, random_modified_p_values_matrix_gpu, modify_p_values_matrix_gpu, sort_and_count_labels_rows_gpu
 from python.random_integers.random_integers import random_num_steps
 
+def rare_weak_null_hypothesis(\
+        sorted_p_values_output: HybridArray,\
+        ind_model: int|np.uint32 = 0,\
+        num_steps: int|np.uint32|None=None,\
+        use_njit: bool|None = None) -> None:
+    random_p_values_matrix(\
+        p_values_output = sorted_p_values_output,\
+        offset_row0= np.uint32(ind_model) * sorted_p_values_output.nrows(),\
+        offset_col0=0,\
+        num_steps=num_steps,
+        use_njit=use_njit)
+    
 def rare_weak_model(\
         sorted_p_values_output: HybridArray,\
         cumulative_counts_output: HybridArray,\
@@ -14,7 +26,6 @@ def rare_weak_model(\
         num_steps: int|np.uint32|None=None,\
         use_njit: bool|None = None,
         sort_labels: bool = True) -> None:
-    sorted_p_values_output.astype(np.float64)
     random_p_values_matrix(\
         p_values_output = sorted_p_values_output,\
         offset_row0= np.uint32(ind_model) * sorted_p_values_output.nrows(),\
@@ -33,6 +44,8 @@ def sort_and_count_labels_rows(\
         cumulative_counts_output: HybridArray,\
         n1: int|np.uint32,\
         use_njit: bool|None = None) -> None:
+    if n1 < 1:
+        return
     cumulative_counts_output.realloc(like=sorted_p_values_inoutput, dtype=np.uint32)
     n1 = np.uint32(n1)
     if sorted_p_values_inoutput.is_gpu():
