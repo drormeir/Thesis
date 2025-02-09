@@ -20,7 +20,7 @@ def rare_weak_null_hypothesis(\
 def rare_weak_model(\
         sorted_p_values_output: HybridArray,\
         cumulative_counts_output: HybridArray,\
-        mu: float|np.float64,\
+        mu: float|np.float64|np.float32,\
         n1: int|np.uint32,\
         ind_model: int|np.uint32 = 0,\
         num_steps: int|np.uint32|None=None,\
@@ -86,7 +86,7 @@ def random_modified_p_values_matrix(\
 
 def modify_p_values_submatrix(\
         p_values_inoutput: HybridArray,\
-        mu: float|np.float64,\
+        mu: float|np.float64|np.float32,\
         n1: int|np.uint32,\
         use_njit: bool|None = None) -> None:
     rows, N = p_values_inoutput.shape()
