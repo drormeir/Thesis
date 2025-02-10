@@ -5,6 +5,28 @@ from python.adaptive_methods.numba_cpu import higher_criticism_stable_cpu_njit, 
 from python.adaptive_methods.python_native import higher_criticism_stable_py, higher_criticism_unstable_py, berk_jones_py
 from python.array_math_utils.array_math_utils import cumulative_argmin, cumulative_min_inplace, cumulative_dominant_argmin, cumulative_dominant_min_inplace
 
+
+def apply_transform_discovery_method(\
+        sorted_p_values_input_output: HybridArray,\
+        num_discoveries_output: HybridArray|None,\
+        transform_method: str,\
+        discover_method: str = 'argmin',\
+        use_njit: bool|None = None) -> None:
+    apply_transform_method(\
+        sorted_p_values_input_output=sorted_p_values_input_output,\
+        transform_method=transform_method,\
+        use_njit=use_njit)
+    if num_discoveries_output is None:
+        apply_discovery_method_on_transformation(\
+            transformed_p_values_input=sorted_p_values_input_output,\
+            discover_method=discover_method, use_njit=use_njit)
+    else:
+        discover_by_method(\
+            transformed_p_values_input=sorted_p_values_input_output,\
+            num_discoveries_output=num_discoveries_output,\
+            discover_method=discover_method,\
+            use_njit=use_njit)
+        
 def apply_transform_method(\
         sorted_p_values_input_output: HybridArray,\
         transform_method: str,\
@@ -82,7 +104,7 @@ def apply_discovery_method_on_transformation(\
 def discover_by_method(\
         transformed_p_values_input: HybridArray,\
         num_discoveries_output: HybridArray,\
-        discover_method: str = 'argmin',\
+        discover_method: str,\
         use_njit: bool|None = None) -> None:
     if discover_method == 'argmin':
         cumulative_argmin(array=transformed_p_values_input,\
