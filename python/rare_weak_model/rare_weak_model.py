@@ -4,6 +4,7 @@ from python.rare_weak_model.python_native import random_p_values_matrix_py, rand
 from python.rare_weak_model.numba_cpu import random_p_values_matrix_cpu_njit, random_p_values_series_cpu_njit, random_modified_p_values_matrix_cpu_njit, modify_p_values_matrix_cpu_njit, sort_and_count_labels_rows_cpu_njit
 from python.rare_weak_model.numba_gpu import random_p_values_matrix_gpu, random_p_values_series_gpu, random_modified_p_values_matrix_gpu, modify_p_values_matrix_gpu, sort_and_count_labels_rows_gpu
 from python.random_integers.random_integers import random_num_steps
+from python.array_math_utils.array_math_utils import sort_rows_inplace
 
 def rare_weak_null_hypothesis(\
         sorted_p_values_output: HybridArray,\
@@ -16,16 +17,16 @@ def rare_weak_null_hypothesis(\
         offset_col0=0,\
         num_steps=num_steps,
         use_njit=use_njit)
+    sort_rows_inplace(array=sorted_p_values_output, use_njit=use_njit)
     
 def rare_weak_model(\
         sorted_p_values_output: HybridArray,\
-        cumulative_counts_output: HybridArray,\
+        cumulative_counts_output: HybridArray|None,\
         mu: float|np.float64|np.float32,\
         n1: int|np.uint32,\
         ind_model: int|np.uint32 = 0,\
         num_steps: int|np.uint32|None=None,\
-        use_njit: bool|None = None,
-        sort_labels: bool = True) -> None:
+        use_njit: bool|None = None) -> None:
     random_p_values_matrix(\
         p_values_output = sorted_p_values_output,\
         offset_row0= np.uint32(ind_model) * sorted_p_values_output.nrows(),\
@@ -34,10 +35,12 @@ def rare_weak_model(\
         use_njit=use_njit)
     modify_p_values_submatrix(p_values_inoutput = sorted_p_values_output,\
                               mu = mu, n1=n1, use_njit=use_njit)
-    if sort_labels:
+    if cumulative_counts_output is None:
+        sort_rows_inplace(array=sorted_p_values_output, use_njit=use_njit)
+    else:
         sort_and_count_labels_rows(sorted_p_values_inoutput=sorted_p_values_output,\
-                                   cumulative_counts_output=cumulative_counts_output,\
-                                   n1=n1, use_njit=use_njit)
+                                    cumulative_counts_output=cumulative_counts_output,\
+                                    n1=n1, use_njit=use_njit)
 
 def sort_and_count_labels_rows(\
         sorted_p_values_inoutput: HybridArray,\
