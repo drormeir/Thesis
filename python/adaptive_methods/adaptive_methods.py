@@ -1,8 +1,9 @@
 import numpy as np
 from python.hpc import globals, raise_cuda_not_available, raise_njit_not_available, HybridArray
-from python.adaptive_methods.numba_gpu import higher_criticism_stable_gpu, higher_criticism_unstable_gpu, berk_jones_gpu, discover_argmin_gpu, discover_dominant_gpu
-from python.adaptive_methods.numba_cpu import higher_criticism_stable_cpu_njit, higher_criticism_unstable_cpu_njit, berk_jones_cpu_njit, discover_argmin_cpu_njit, discover_dominant_cpu_njit
-from python.adaptive_methods.python_native import higher_criticism_stable_py, higher_criticism_unstable_py, berk_jones_py, discover_argmin_py, discover_dominant_py
+from python.adaptive_methods.numba_gpu import higher_criticism_stable_gpu, higher_criticism_unstable_gpu, berk_jones_gpu
+from python.adaptive_methods.numba_cpu import higher_criticism_stable_cpu_njit, higher_criticism_unstable_cpu_njit, berk_jones_cpu_njit
+from python.adaptive_methods.python_native import higher_criticism_stable_py, higher_criticism_unstable_py, berk_jones_py
+from python.array_math_utils.array_math_utils import cumulative_argmin, cumulative_min_inplace, cumulative_dominant_argmin, cumulative_dominant_min_inplace
 
 def apply_transform_method(\
         sorted_p_values_input_output: HybridArray,\
@@ -69,56 +70,26 @@ def berk_jones(\
         else:
             berk_jones_py(sorted_p_values_input_output=sorted_p_values_input_output.numpy())
 
+def apply_discovery_method_on_transformation(\
+        transformed_p_values_input: HybridArray,\
+        discover_method: str = 'argmin',\
+        use_njit: bool|None = None) -> None:
+    if discover_method == 'argmin':
+        cumulative_min_inplace(array=transformed_p_values_input, use_njit=use_njit)
+    else:
+        cumulative_dominant_min_inplace(array=transformed_p_values_input, use_njit=use_njit)
+
 def discover_by_method(\
         transformed_p_values_input: HybridArray,\
         num_discoveries_output: HybridArray,\
         discover_method: str = 'argmin',\
         use_njit: bool|None = None) -> None:
     if discover_method == 'argmin':
-        discover_argmin(transformed_p_values_input=transformed_p_values_input,\
-                        num_discoveries_output=num_discoveries_output,\
+        cumulative_argmin(array=transformed_p_values_input,\
+                        argmin=num_discoveries_output,\
                         use_njit=use_njit)
     else:
-        discover_dominant(transformed_p_values_input=transformed_p_values_input,\
-                        num_discoveries_output=num_discoveries_output,\
+        cumulative_dominant_argmin(array=transformed_p_values_input,\
+                        argmin=num_discoveries_output,\
                         use_njit=use_njit)
-
-def discover_argmin(\
-        transformed_p_values_input: HybridArray,\
-        num_discoveries_output: HybridArray,\
-        use_njit: bool|None = None) -> None:
-    num_discoveries_output.realloc(like=transformed_p_values_input, dtype=np.uint32)
-    if transformed_p_values_input.is_gpu():
-        # GPU mode
-        grid_shape, block_shape = transformed_p_values_input.gpu_grid_block1D_rows_shapes()
-        discover_argmin_gpu[grid_shape, block_shape](transformed_p_values_input.gpu_data(), num_discoveries_output.gpu_data()) # type: ignore
-    else:
-        # CPU mode
-        if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
-            discover_argmin_cpu_njit(transformed_p_values_input=transformed_p_values_input.numpy(),\
-                                     num_discoveries_output=num_discoveries_output.numpy())
-        else:
-            discover_argmin_py(\
-                transformed_p_values_input=transformed_p_values_input.numpy(),\
-                num_discoveries_output=num_discoveries_output.numpy())
-
-
-def discover_dominant(\
-        transformed_p_values_input: HybridArray,\
-        num_discoveries_output: HybridArray,\
-        use_njit: bool|None = None) -> None:
-    num_discoveries_output.realloc(like=transformed_p_values_input, dtype=np.uint32)
-    if transformed_p_values_input.is_gpu():
-        # GPU mode
-        grid_shape, block_shape = transformed_p_values_input.gpu_grid_block1D_rows_shapes()
-        discover_dominant_gpu[grid_shape, block_shape](transformed_p_values_input.gpu_data(), num_discoveries_output.gpu_data()) # type: ignore
-    else:
-        # CPU mode
-        if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
-            discover_dominant_cpu_njit(transformed_p_values_input=transformed_p_values_input.numpy(),\
-                                     num_discoveries_output=num_discoveries_output.numpy())
-        else:
-            discover_dominant_py(\
-                transformed_p_values_input=transformed_p_values_input.numpy(),\
-                num_discoveries_output=num_discoveries_output.numpy())
 
