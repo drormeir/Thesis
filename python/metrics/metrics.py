@@ -11,12 +11,16 @@ from tqdm import tqdm
 def analyze_multi_auc(auc_results: HybridArray, shape: tuple,\
                       transform_method: str,\
                        discover_method: str,\
-                      epsilons: list, mus: list,\
+                      n1s: list|np.ndarray, mus: list|np.ndarray,\
                       use_gpu: bool|None = None, use_njit: bool|None = None,\
                       num_steps: int|None=None) -> None:
-    assert epsilons and mus
-    assert len(epsilons) == len(mus)
-    num_executions = len(epsilons)
+    if isinstance(n1s, np.ndarray):
+        n1s = n1s.reshape(-1).tolist()
+    if isinstance(mus, np.ndarray):
+        mus = mus.reshape(-1).tolist()
+    assert n1s and mus
+    assert len(n1s) == len(mus)
+    num_executions = len(n1s)
     auc_results.realloc(shape=(num_executions,shape[1]), dtype=np.float64, use_gpu=use_gpu)
 
     with (HybridArray() as noise,\
@@ -28,12 +32,12 @@ def analyze_multi_auc(auc_results: HybridArray, shape: tuple,\
                         discover_method=discover_method,\
                         use_gpu=use_gpu, use_njit=use_njit, num_steps=num_steps, ind_model=num_executions)
         pbar.update(1)
-        for ind_model,eps,mu in zip(range(num_executions), epsilons, mus):
+        for ind_model,n1,mu in zip(range(num_executions), n1s, mus):
             pbar.set_postfix({"Current Step": ind_model+1})  # Set dynamic message
             create_signal_4_auc(signal=signal, shape=shape,\
                                 transform_method=transform_method,\
                             discover_method=discover_method,\
-                                ind_model=ind_model, epsilon=eps, mu=mu,\
+                                ind_model=ind_model, n1=n1, mu=mu,\
                                 use_gpu=use_gpu, use_njit=use_njit,\
                                 num_steps=num_steps)
             auc_results.select_row(ind_model)
@@ -66,11 +70,10 @@ def create_signal_4_auc(signal: HybridArray, shape: tuple,\
                         transform_method: str,\
                         discover_method: str,\
                         ind_model: int,\
-                        epsilon: np.float64|np.float32|float, mu: np.float64|np.float32|float,\
+                        n1: np.uint32|int, mu: np.float64|np.float32|float,\
                         use_gpu: bool|None = None, use_njit: bool|None = None,\
                         num_steps: int|None = None) -> None:
     signal.realloc(shape=shape, dtype=np.float64, use_gpu=use_gpu)
-    n1 = max(np.uint32(1),np.uint32(epsilon*shape[1]))
     rare_weak_model(sorted_p_values_output=signal,\
                     cumulative_counts_output=None,\
                     ind_model=ind_model, mu=mu, n1=n1, num_steps=num_steps, use_njit=use_njit)
