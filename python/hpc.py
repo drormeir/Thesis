@@ -459,11 +459,19 @@ class HybridArray:
         assert isinstance(self.data, DeviceNDArray)
         return self.data
         
-    def select_row(self, i: int) -> None:
+    def select_row(self, i: int|np.uint32) -> 'HybridArray':
         if self.original_numpy_data is not None:
             self.data = self.original_numpy_data[i:i+1, :]
         elif self.original_numba_data is not None:
             self.data = self.original_numba_data[i:i+1, :]
+        return self
+    
+    def select_col(self, i: int|np.uint32) -> 'HybridArray':
+        if self.original_numpy_data is not None:
+            self.data = self.original_numpy_data[:,i:i+1]
+        elif self.original_numba_data is not None:
+            self.data = self.original_numba_data[:,i:i+1]
+        return self
     
     def swap(self, other: 'HybridArray') -> None:
         self.original_numba_data, other.original_numba_data = other.original_numba_data, self.original_numba_data

@@ -18,6 +18,8 @@ if not cpu_njit_num_threads:
         raise_njit_not_available()
     def cumulative_dominant_min_inplace_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
+    def max_along_rows_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
 else:
     import numpy as np
     import numba
@@ -40,21 +42,6 @@ else:
     def sort_rows_inplace_cpu_njit(array: np.ndarray) -> None:
         for ind_row in numba.prange(array.shape[0]):
             array[ind_row,:] = np.sort(array[ind_row])
-
-    @numba.njit(parallel=False)
-    def split2chunks(size: int) -> np.ndarray:
-        num_chunks = min(size, cpu_njit_num_threads)
-        chunk_base_size = size // num_chunks
-        chunk_residue = size % num_chunks
-        ranges = np.empty((num_chunks, 2), dtype=np.uint32)
-        for ind_chunk in range(num_chunks):
-            current_residue = int(ind_chunk < chunk_residue)
-            current_size = chunk_base_size + current_residue
-            chunk_offset = ind_chunk*(current_residue + chunk_base_size)+chunk_residue*(1-current_residue)
-            ranges[ind_chunk, 0] = chunk_offset
-            ranges[ind_chunk, 1] = chunk_offset + current_size
-        return ranges
-
 
     @numba.njit(parallel=True)
     def cumulative_argmin_cpu_njit(array: np.ndarray, argmin: np.ndarray) -> None:
@@ -124,3 +111,28 @@ else:
                     current_dominant = current_min
                     max_dominant_length = curr_dominant_length
                 row[j] = current_dominant
+
+    @numba.njit(parallel=True)
+    def max_along_rows_cpu_njit(array: np.ndarray, argmax: np.ndarray, maxval: np.ndarray) -> None:
+        rows = array.shape[0]
+        chunks_ranges = split2chunks(rows)
+        for ind_chunck in numba.prange(chunks_ranges.shape[0]):
+            begin, end = chunks_ranges[ind_chunck]
+            array[begin:end].argmax(axis=1, out=argmax[begin:end])
+            array[begin:end].max(axis=1, out=maxval[begin:end])
+
+    @numba.njit(parallel=False)
+    def split2chunks(size: int) -> np.ndarray:
+        num_chunks = min(size, cpu_njit_num_threads)
+        chunk_base_size = size // num_chunks
+        chunk_residue = size % num_chunks
+        ranges = np.empty((num_chunks, 2), dtype=np.uint32)
+        for ind_chunk in range(num_chunks):
+            current_residue = int(ind_chunk < chunk_residue)
+            current_size = chunk_base_size + current_residue
+            chunk_offset = ind_chunk*(current_residue + chunk_base_size)+chunk_residue*(1-current_residue)
+            ranges[ind_chunk, 0] = chunk_offset
+            ranges[ind_chunk, 1] = chunk_offset + current_size
+        return ranges
+
+

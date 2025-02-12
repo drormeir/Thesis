@@ -5,15 +5,17 @@ from python.metrics.numba_cpu import detect_signal_auc_cpu_njit
 from python.metrics.python_native import detect_signal_auc_py
 from python.rare_weak_model.rare_weak_model import rare_weak_null_hypothesis, rare_weak_model
 from python.adaptive_methods.adaptive_methods import apply_transform_discovery_method
-from python.array_math_utils.array_math_utils import array_transpose_inplace, sort_rows_inplace
+from python.array_math_utils.array_math_utils import array_transpose_inplace, sort_rows_inplace, max_along_rows
 from tqdm import tqdm
 
-def analyze_multi_auc(auc_results: HybridArray, shape: tuple,\
-                      transform_method: str,\
-                       discover_method: str,\
-                      n1s: list|np.ndarray, mus: list|np.ndarray,\
-                      use_gpu: bool|None = None, use_njit: bool|None = None,\
-                      num_steps: int|None=None) -> None:
+def analyze_multi_auc(\
+        shape: tuple,\
+        transform_method: str,\
+        discovery_method: str,\
+        n1s: list|np.ndarray, mus: list|np.ndarray,\
+        alpha_selection_method: str|float|None=None,\
+        use_gpu: bool|None = None, use_njit: bool|None = None,\
+        num_steps: int|None=None) -> np.ndarray:
     if isinstance(n1s, np.ndarray):
         n1s = n1s.reshape(-1).tolist()
     if isinstance(mus, np.ndarray):
@@ -21,7 +23,8 @@ def analyze_multi_auc(auc_results: HybridArray, shape: tuple,\
     assert n1s and mus
     assert len(n1s) == len(mus)
     num_executions = len(n1s)
-    auc_results.realloc(shape=(num_executions,shape[1]), dtype=np.float64, use_gpu=use_gpu)
+    N = shape[1]
+    auc_results = HybridArray().realloc(shape=(num_executions,N), dtype=np.float64, use_gpu=use_gpu)
 
     with (HybridArray() as noise,\
             HybridArray() as signal,\
@@ -29,26 +32,41 @@ def analyze_multi_auc(auc_results: HybridArray, shape: tuple,\
         pbar.set_postfix({"Current Step": 0})  # Set dynamic message
         create_noise_4_auc(noise=noise, shape=shape,\
                         transform_method=transform_method,\
-                        discover_method=discover_method,\
+                        discovery_method=discovery_method,\
                         use_gpu=use_gpu, use_njit=use_njit, num_steps=num_steps, ind_model=num_executions)
         pbar.update(1)
         for ind_model,n1,mu in zip(range(num_executions), n1s, mus):
             pbar.set_postfix({"Current Step": ind_model+1})  # Set dynamic message
-            create_signal_4_auc(signal=signal, shape=shape,\
-                                transform_method=transform_method,\
-                            discover_method=discover_method,\
-                                ind_model=ind_model, n1=n1, mu=mu,\
-                                use_gpu=use_gpu, use_njit=use_njit,\
-                                num_steps=num_steps)
+            create_signal_4_auc(\
+                signal=signal, shape=shape,\
+                transform_method=transform_method,\
+                discovery_method=discovery_method,\
+                ind_model=ind_model, n1=n1, mu=mu,\
+                use_gpu=use_gpu, use_njit=use_njit,\
+                num_steps=num_steps)
             auc_results.select_row(ind_model)
             detect_signal_auc(noise_input=noise, signal_input_work=signal,\
                             auc_out_row=auc_results, use_njit=use_njit)
             pbar.update(1)
 
+    if alpha_selection_method is None:
+        ret = auc_results.numpy()
+    elif isinstance(auc_results,str) and auc_results == 'max':
+        with (HybridArray() as argmax, HybridArray() as maxval):
+            max_along_rows(auc_results,argmax=argmax,maxval=maxval)
+            argmax_result = ((argmax.numpy()+1)/N).astype(np.float64)
+            maxval_result = maxval.numpy()
+            ret = np.hstack([argmax_result, maxval_result])
+    elif isinstance(alpha_selection_method, (float, np.floating)):
+        ind_col = min(np.uint32(N*max(alpha_selection_method,0.0) + 0.5),np.uint32(N-1))
+        ret = auc_results.select_col(ind_col).numpy()
+    else:
+        assert False, f'{alpha_selection_method=}'
+    return ret
 
 def create_noise_4_auc(noise: HybridArray, shape: tuple,\
                        transform_method: str,\
-                       discover_method: str,\
+                       discovery_method: str,\
                        use_gpu: bool|None = None,\
                        use_njit: bool|None = None,\
                        num_steps: int|None=None,\
@@ -60,7 +78,7 @@ def create_noise_4_auc(noise: HybridArray, shape: tuple,\
         sorted_p_values_input_output=noise,
         num_discoveries_output=None,\
         transform_method=transform_method,\
-        discover_method=discover_method,\
+        discovery_method=discovery_method,\
         use_njit=use_njit)
     array_transpose_inplace(noise, use_njit=use_njit)
     sort_rows_inplace(noise, use_njit=use_njit)
@@ -68,7 +86,7 @@ def create_noise_4_auc(noise: HybridArray, shape: tuple,\
 
 def create_signal_4_auc(signal: HybridArray, shape: tuple,\
                         transform_method: str,\
-                        discover_method: str,\
+                        discovery_method: str,\
                         ind_model: int,\
                         n1: np.uint32|int, mu: np.float64|np.float32|float,\
                         use_gpu: bool|None = None, use_njit: bool|None = None,\
@@ -81,7 +99,7 @@ def create_signal_4_auc(signal: HybridArray, shape: tuple,\
         sorted_p_values_input_output=signal,\
         num_discoveries_output=None,\
         transform_method=transform_method,\
-        discover_method=discover_method,\
+        discovery_method=discovery_method,\
         use_njit=use_njit)
 
 

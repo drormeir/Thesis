@@ -10,7 +10,7 @@ def apply_transform_discovery_method(\
         sorted_p_values_input_output: HybridArray,\
         num_discoveries_output: HybridArray|None,\
         transform_method: str,\
-        discover_method: str = 'argmin',\
+        discovery_method: str = 'argmin',\
         use_njit: bool|None = None) -> None:
     apply_transform_method(\
         sorted_p_values_input_output=sorted_p_values_input_output,\
@@ -19,12 +19,12 @@ def apply_transform_discovery_method(\
     if num_discoveries_output is None:
         apply_discovery_method_on_transformation(\
             transformed_p_values_input=sorted_p_values_input_output,\
-            discover_method=discover_method, use_njit=use_njit)
+            discovery_method=discovery_method, use_njit=use_njit)
     else:
         discover_by_method(\
             transformed_p_values_input=sorted_p_values_input_output,\
             num_discoveries_output=num_discoveries_output,\
-            discover_method=discover_method,\
+            discovery_method=discovery_method,\
             use_njit=use_njit)
         
 def apply_transform_method(\
@@ -94,9 +94,9 @@ def berk_jones(\
 
 def apply_discovery_method_on_transformation(\
         transformed_p_values_input: HybridArray,\
-        discover_method: str = 'argmin',\
+        discovery_method: str = 'argmin',\
         use_njit: bool|None = None) -> None:
-    if discover_method == 'argmin':
+    if discovery_method == 'argmin':
         cumulative_min_inplace(array=transformed_p_values_input, use_njit=use_njit)
     else:
         cumulative_dominant_min_inplace(array=transformed_p_values_input, use_njit=use_njit)
@@ -104,9 +104,9 @@ def apply_discovery_method_on_transformation(\
 def discover_by_method(\
         transformed_p_values_input: HybridArray,\
         num_discoveries_output: HybridArray,\
-        discover_method: str,\
+        discovery_method: str,\
         use_njit: bool|None = None) -> None:
-    if discover_method == 'argmin':
+    if discovery_method == 'argmin':
         cumulative_argmin(array=transformed_p_values_input,\
                         argmin=num_discoveries_output,\
                         use_njit=use_njit)
