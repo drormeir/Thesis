@@ -8,6 +8,8 @@ def heatmap_r_beta_range(r_range: list|np.ndarray,\
                          value_name: str|None = None,\
                          data_min: float|None = None,\
                          data_max: float|None = None,\
+                         x_ticks_rotation: float|int|str|None = None,\
+                         data_font_size: int|float|None=None,\
                          **kwargs) -> None:
     beta_range = np.sort(np.asarray(beta_range).reshape(-1))
     r_range = np.sort(np.asarray(r_range).reshape(-1))
@@ -28,12 +30,22 @@ def heatmap_r_beta_range(r_range: list|np.ndarray,\
         plt.colorbar(label=value_name)
     plt.xlabel('Beta')
     plt.ylabel('r')
-    plt.xticks(beta_range, [f'{val:.2f}' for val in beta_range])
+    xticks_kwargs = {}
+    if x_ticks_rotation is None:
+        if num_x > 15:
+            xticks_kwargs['rotation'] = 90
+    else:
+        xticks_kwargs['rotation'] = x_ticks_rotation
+    plt.xticks(ticks=beta_range, labels=[f'{val:.2f}' for val in beta_range], **xticks_kwargs)
     plt.yticks(r_range, [f'{val:.2f}' for val in r_range])
     # Add values on top of heatmap
+    if data_font_size is None:
+        data_font_size = 8 if num_x < 15 else 7
     for i in range(num_y):
         for j in range(num_x):
-            plt.text(x=beta_range[j], y=beta_range[i], s=f"{data[i, j]:.2f}", color="white", ha="center", va="center", fontsize=8)
+            plt.text(x=beta_range[j], y=r_range[i], s=f"{data[i, j]:.2f}",\
+                     color="white", ha="center", va="center",\
+                        fontsize=data_font_size)
 
     if title is not None:
         plt.title(title)
