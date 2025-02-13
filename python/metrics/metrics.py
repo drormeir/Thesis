@@ -17,12 +17,17 @@ def analyze_auc_r_beta_ranges(\
         **kwargs) -> np.ndarray:
     r_range = np.asarray(r_range).reshape(-1)
     beta_range = np.asarray(beta_range).reshape(-1)
+    out_shape = (r_range.size,beta_range.size)
     mus = np.sqrt(2*r_range*np.log(N))
     epsilons = np.power(N,-beta_range)
     n1s = np.clip((epsilons*N+0.5).astype(np.uint32),np.uint32(1),N)
     mus, n1s = zip(*itertools.product(mus,n1s))
     ret = analyze_multi_auc(N=N, alpha_selection_method=alpha_selection_method,\
                             n1s=n1s, mus=mus, **kwargs)
+    if isinstance(alpha_selection_method, str):
+        ret = ret.reshape((2,)+out_shape)
+    else:
+        ret = ret.reshape(out_shape)
     return ret
 
 def analyze_multi_auc(\
