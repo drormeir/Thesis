@@ -9,39 +9,31 @@ from python.array_math_utils.array_math_utils import cumulative_argmin, cumulati
 def apply_transform_discovery_method(\
         sorted_p_values_input_output: HybridArray,\
         num_discoveries_output: HybridArray|None,\
-        transform_method: str,\
-        discovery_method: str = 'argmin',\
-        use_njit: bool|None = None) -> None:
+        **kwargs) -> None:
     apply_transform_method(\
         sorted_p_values_input_output=sorted_p_values_input_output,\
-        transform_method=transform_method,\
-        use_njit=use_njit)
+        **kwargs)
     if num_discoveries_output is None:
         apply_discovery_method_on_transformation(\
             transformed_p_values_input=sorted_p_values_input_output,\
-            discovery_method=discovery_method, use_njit=use_njit)
+            **kwargs)
     else:
         discover_by_method(\
             transformed_p_values_input=sorted_p_values_input_output,\
             num_discoveries_output=num_discoveries_output,\
-            discovery_method=discovery_method,\
-            use_njit=use_njit)
+            **kwargs)
         
 def apply_transform_method(\
         sorted_p_values_input_output: HybridArray,\
         transform_method: str,\
-        use_njit: bool|None = None) -> None:
+        **kwargs) -> None:
+    use_njit = kwargs.get('use_njit', None)
     if transform_method == 'higher_criticism_stable':
-        higher_criticism_stable(\
-            sorted_p_values_input_output=sorted_p_values_input_output,\
-            use_njit=use_njit)
+        higher_criticism_stable(sorted_p_values_input_output,use_njit=use_njit)
     elif transform_method == 'higher_criticism_unstable':
-        higher_criticism_unstable(\
-            sorted_p_values_input_output=sorted_p_values_input_output,\
-            use_njit=use_njit)
+        higher_criticism_unstable(sorted_p_values_input_output,use_njit=use_njit)
     elif transform_method == 'berk_jones':
-        berk_jones(sorted_p_values_input_output=sorted_p_values_input_output,\
-                   use_njit=use_njit)
+        berk_jones(sorted_p_values_input_output,use_njit=use_njit)
     else:
         assert False, f'{transform_method=}'
         
@@ -95,7 +87,8 @@ def berk_jones(\
 def apply_discovery_method_on_transformation(\
         transformed_p_values_input: HybridArray,\
         discovery_method: str = 'argmin',\
-        use_njit: bool|None = None) -> None:
+        **kwargs) -> None:
+    use_njit = kwargs.get('use_njit', None)
     if discovery_method == 'argmin':
         cumulative_min_inplace(array=transformed_p_values_input, use_njit=use_njit)
     else:
@@ -105,7 +98,8 @@ def discover_by_method(\
         transformed_p_values_input: HybridArray,\
         num_discoveries_output: HybridArray,\
         discovery_method: str,\
-        use_njit: bool|None = None) -> None:
+        **kwargs) -> None:
+    use_njit = kwargs.get('use_njit', None)
     if discovery_method == 'argmin':
         cumulative_argmin(array=transformed_p_values_input,\
                         argmin=num_discoveries_output,\

@@ -9,32 +9,32 @@ from python.array_math_utils.array_math_utils import sort_rows_inplace
 def rare_weak_null_hypothesis(\
         sorted_p_values_output: HybridArray,\
         ind_model: int|np.uint32 = 0,\
-        num_steps: int|np.uint32|None=None,\
-        use_njit: bool|None = None) -> None:
+        **kwargs) -> None:
+    num_steps = kwargs.get('num_steps', None)
+    use_njit = kwargs.get('use_njit', None)
     random_p_values_matrix(\
         p_values_output = sorted_p_values_output,\
         offset_row0= np.uint32(ind_model) * sorted_p_values_output.nrows(),\
         offset_col0=0,\
-        num_steps=num_steps,
-        use_njit=use_njit)
+        num_steps=num_steps, use_njit=use_njit)
     sort_rows_inplace(array=sorted_p_values_output, use_njit=use_njit)
     
 def rare_weak_model(\
         sorted_p_values_output: HybridArray,\
         cumulative_counts_output: HybridArray|None,\
-        mu: float|np.float64|np.float32,\
-        n1: int|np.uint32,\
         ind_model: int|np.uint32 = 0,\
-        num_steps: int|np.uint32|None=None,\
-        use_njit: bool|None = None) -> None:
+        **kwargs) -> None:
+    num_steps = kwargs.get('num_steps', None)
+    use_njit = kwargs.get('use_njit', None)
+    n1 = kwargs['n1']
+    mu = kwargs['mu']
     random_p_values_matrix(\
         p_values_output = sorted_p_values_output,\
         offset_row0= np.uint32(ind_model) * sorted_p_values_output.nrows(),\
         offset_col0=0,\
-        num_steps=num_steps,
-        use_njit=use_njit)
+        num_steps=num_steps, use_njit=use_njit)
     modify_p_values_submatrix(p_values_inoutput = sorted_p_values_output,\
-                              mu = mu, n1=n1, use_njit=use_njit)
+                              mu=mu, n1=n1, use_njit=use_njit)
     if cumulative_counts_output is None:
         sort_rows_inplace(array=sorted_p_values_output, use_njit=use_njit)
     else:

@@ -1,4 +1,6 @@
+import itertools
 import numpy as np
+from tqdm import tqdm
 from python.hpc import globals, raise_cuda_not_available, raise_njit_not_available, HybridArray
 from python.metrics.numba_gpu import detect_signal_auc_gpu
 from python.metrics.numba_cpu import detect_signal_auc_cpu_njit
@@ -6,16 +8,28 @@ from python.metrics.python_native import detect_signal_auc_py
 from python.rare_weak_model.rare_weak_model import rare_weak_null_hypothesis, rare_weak_model
 from python.adaptive_methods.adaptive_methods import apply_transform_discovery_method
 from python.array_math_utils.array_math_utils import array_transpose_inplace, sort_rows_inplace, max_along_rows
-from tqdm import tqdm
+
+def analyze_auc_r_beta_ranges(\
+        N: int,\
+        r_range: np.ndarray|list,\
+        beta_range: np.ndarray|list,\
+        alpha_selection_method: str|float,\
+        **kwargs) -> np.ndarray:
+    r_range = np.asarray(r_range).reshape(-1)
+    beta_range = np.asarray(beta_range).reshape(-1)
+    mus = np.sqrt(2*r_range*np.log(N))
+    epsilons = np.power(N,-beta_range)
+    n1s = np.clip((epsilons*N+0.5).astype(np.uint32),np.uint32(1),N)
+    mus, n1s = zip(*itertools.product(mus,n1s))
+    ret = analyze_multi_auc(N=N, alpha_selection_method=alpha_selection_method,\
+                            n1s=n1s, mus=mus, **kwargs)
+    return ret
 
 def analyze_multi_auc(\
-        shape: tuple,\
-        transform_method: str,\
-        discovery_method: str,\
-        n1s: list|np.ndarray, mus: list|np.ndarray,\
+        N: int,\
+        n1s: tuple|list|np.ndarray, mus: tuple|list|np.ndarray,\
         alpha_selection_method: str|float|None=None,\
-        use_gpu: bool|None = None, use_njit: bool|None = None,\
-        num_steps: int|None=None) -> np.ndarray:
+        **kwargs) -> np.ndarray:
     if isinstance(n1s, np.ndarray):
         n1s = n1s.reshape(-1).tolist()
     if isinstance(mus, np.ndarray):
@@ -23,30 +37,24 @@ def analyze_multi_auc(\
     assert n1s and mus
     assert len(n1s) == len(mus)
     num_executions = len(n1s)
-    N = shape[1]
+    use_gpu = kwargs.get('use_gpu', None)
+    use_njit = kwargs.get('use_njit', None)
     auc_results = HybridArray().realloc(shape=(num_executions,N), dtype=np.float64, use_gpu=use_gpu)
-
     with (HybridArray() as noise,\
             HybridArray() as signal,\
             tqdm(total=num_executions+1, desc="Processing", unit="step") as pbar):
         pbar.set_postfix({"Current Step": 0})  # Set dynamic message
-        create_noise_4_auc(noise=noise, shape=shape,\
-                        transform_method=transform_method,\
-                        discovery_method=discovery_method,\
-                        use_gpu=use_gpu, use_njit=use_njit, num_steps=num_steps, ind_model=num_executions)
+        create_noise_4_auc(noise=noise, N=N, ind_model=num_executions, **kwargs)
         pbar.update(1)
         for ind_model,n1,mu in zip(range(num_executions), n1s, mus):
             pbar.set_postfix({"Current Step": ind_model+1})  # Set dynamic message
             create_signal_4_auc(\
-                signal=signal, shape=shape,\
-                transform_method=transform_method,\
-                discovery_method=discovery_method,\
+                signal=signal, N=N,\
                 ind_model=ind_model, n1=n1, mu=mu,\
-                use_gpu=use_gpu, use_njit=use_njit,\
-                num_steps=num_steps)
-            auc_results.select_row(ind_model)
+                **kwargs)
             detect_signal_auc(noise_input=noise, signal_input_work=signal,\
-                            auc_out_row=auc_results, use_njit=use_njit)
+                            auc_out_row=auc_results.select_row(ind_model),\
+                                use_njit=use_njit)
             pbar.update(1)
 
     if alpha_selection_method is None:
@@ -64,43 +72,38 @@ def analyze_multi_auc(\
         assert False, f'{alpha_selection_method=}'
     return ret
 
-def create_noise_4_auc(noise: HybridArray, shape: tuple,\
-                       transform_method: str,\
-                       discovery_method: str,\
-                       use_gpu: bool|None = None,\
-                       use_njit: bool|None = None,\
-                       num_steps: int|None=None,\
-                       ind_model: int=0) -> None:
-    noise.realloc(shape=shape, dtype=np.float64, use_gpu=use_gpu)
+def create_noise_4_auc(noise: HybridArray,\
+                       num_monte: int, N: int,\
+                       ind_model: int=0,
+                       **kwargs) -> None:
+    use_gpu = kwargs.get('use_gpu', None)
+    use_njit = kwargs.get('use_njit', None)
+    noise.realloc(shape=(num_monte,N), dtype=np.float64, use_gpu=use_gpu)
     rare_weak_null_hypothesis(sorted_p_values_output=noise, ind_model=ind_model,\
-                              num_steps=num_steps, use_njit=use_njit)
+                              **kwargs)
     apply_transform_discovery_method(
         sorted_p_values_input_output=noise,
         num_discoveries_output=None,\
-        transform_method=transform_method,\
-        discovery_method=discovery_method,\
-        use_njit=use_njit)
+        **kwargs)
     array_transpose_inplace(noise, use_njit=use_njit)
     sort_rows_inplace(noise, use_njit=use_njit)
 
 
-def create_signal_4_auc(signal: HybridArray, shape: tuple,\
-                        transform_method: str,\
-                        discovery_method: str,\
+def create_signal_4_auc(signal: HybridArray,\
+                       num_monte: int, N: int,\
                         ind_model: int,\
                         n1: np.uint32|int, mu: np.float64|np.float32|float,\
-                        use_gpu: bool|None = None, use_njit: bool|None = None,\
-                        num_steps: int|None = None) -> None:
-    signal.realloc(shape=shape, dtype=np.float64, use_gpu=use_gpu)
+                        **kwargs) -> None:
+    use_gpu = kwargs.get('use_gpu', None)
+    signal.realloc(shape=(num_monte,N), dtype=np.float64, use_gpu=use_gpu)
     rare_weak_model(sorted_p_values_output=signal,\
                     cumulative_counts_output=None,\
-                    ind_model=ind_model, mu=mu, n1=n1, num_steps=num_steps, use_njit=use_njit)
+                    ind_model=ind_model, mu=mu, n1=n1,\
+                    **kwargs)
     apply_transform_discovery_method(\
         sorted_p_values_input_output=signal,\
         num_discoveries_output=None,\
-        transform_method=transform_method,\
-        discovery_method=discovery_method,\
-        use_njit=use_njit)
+        **kwargs)
 
 
 def detect_signal_auc(\
