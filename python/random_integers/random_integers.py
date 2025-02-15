@@ -1,23 +1,31 @@
 import numpy as np
-from python.hpc import globals, raise_cuda_not_available, raise_njit_not_available, HybridArray
-from python.random_integers.numba_gpu import random_integers_matrix_gpu, splitmix64_matrix_gpu, random_integer_base_states_matrix_gpu, random_integers_series_gpu
-from python.random_integers.numba_cpu import random_integers_matrix_cpu_njit, splitmix64_from_states_cpu_njit, random_integer_base_states_from_seeds_cpu_njit, random_integers_series_cpu_njit
+from python.hpc import globals, HybridArray
+from python.random_integers.numba_gpu import random_integers_matrix_gpu, splitmix64_matrix_gpu, random_integer_base_states_matrix_gpu, random_integers_series_gpu, random_integers_2_p_values_gpu
+from python.random_integers.numba_cpu import random_integers_matrix_cpu_njit, splitmix64_from_states_cpu_njit, random_integer_base_states_from_seeds_cpu_njit, random_integers_series_cpu_njit, random_integers_2_p_values_cpu_njit
 from python.random_integers.python_native import random_integers_matrix_py, splitmix64_from_states_py, random_integer_base_states_from_seeds_py, random_integers_series_py
 
 def random_num_steps(num_steps: int|np.uint32|None = None) -> np.uint32:
-    return np.uint32(1) if num_steps is None else np.uint32(num_steps)
+    return np.uint32(2) if num_steps is None else np.uint32(num_steps)
 
-def random_integers_matrix(data: HybridArray, offset_row0: int|np.uint32, offset_col0: int|np.uint32, num_steps: int|np.uint32|None = None, use_njit: bool|None = None) -> None:
+
+def random_integers_matrix(data: HybridArray,\
+                           offset_row0: int|np.uint32,\
+                           offset_col0: int|np.uint32,\
+                           num_steps: int|np.uint32|None = None,\
+                           use_njit: bool|None = None) -> None:
     data.astype(np.uint64)
+    assert data.dtype() == np.uint64, f'{data.dtype()=}'
     offset_row0 = np.uint32(offset_row0)
     offset_col0 = np.uint32(offset_col0)
     num_steps = random_num_steps(num_steps)
     if data.is_gpu():
         # GPU mode
+        assert data.gpu_data().dtype == np.uint64, f'{data.dtype()=} {data.gpu_data().dtype=}'
         grid_shape, block_shape = data.gpu_grid_block2D_square_shapes()
-        random_integers_matrix_gpu[grid_shape, block_shape](num_steps, offset_row0, offset_col0, data.data) # type: ignore
+        random_integers_matrix_gpu[grid_shape, block_shape](num_steps, offset_row0, offset_col0, data.gpu_data()) # type: ignore
     else:
         # CPU mode
+        assert data.numpy().dtype == np.uint64, f'{data.dtype()=} {data.numpy().dtype=}'
         if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
             random_integers_matrix_cpu_njit(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=data.numpy())
         else:
@@ -48,6 +56,7 @@ def splitmix64_matrix(states: np.ndarray,\
         out_z.clone_from_numpy(out_z_data)
     states_array.close()
 
+
 def random_integers_base_states_matrix(\
         seeds: np.ndarray,\
         out_s0: HybridArray,\
@@ -73,7 +82,9 @@ def random_integers_base_states_matrix(\
         out_s1.clone_from_numpy(out_s1_data)
     seeds_array.close()
 
-def random_integers_series(data: HybridArray, seed: int|np.uint64, use_njit: bool|None = None) -> None:
+
+def random_integers_series(data: HybridArray, seed: int|np.uint64,\
+                           use_njit: bool|None = None) -> None:
     data.astype(np.uint64)
     seed = np.uint64(seed)
     if data.is_gpu():
@@ -86,3 +97,19 @@ def random_integers_series(data: HybridArray, seed: int|np.uint64, use_njit: boo
             random_integers_series_cpu_njit(seed=seed, out=data.data)
         else:
             random_integers_series_py(seed=seed, out=data.data)
+
+
+def random_integers_2_p_values(integers: HybridArray, p_values: HybridArray,\
+                                use_njit: bool|None = None) -> None:
+    assert integers.dtype() == np.uint64, f'{integers.dtype()=}'
+    p_values.realloc(like=integers, dtype=np.float64)
+    if integers.is_gpu():
+        # GPU mode
+        grid_shape, block_shape = integers.gpu_grid_block2D_square_shapes()
+        random_integers_2_p_values_gpu[grid_shape, block_shape](integers.gpu_data(), p_values.gpu_data()) # type: ignore
+    else:
+        # CPU mode
+        if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
+            random_integers_2_p_values_cpu_njit(integers.numpy(), p_values.numpy())
+        else:
+            p_values.numpy()[:] = (integers.numpy() + np.float64(0.5))/np.float64(2.0**64)

@@ -55,6 +55,7 @@ else:
 
     @numba.cuda.jit(device=False)
     def random_integers_series_gpu(seed: np.uint64, out: DeviceNDArray):
+        seed = scramble_seed_gpu(seed)
         s0, s1 = random_integer_base_states_gpu(seed)
         num_steps = out.size
         ind_start = numba.cuda.grid(1) # type: ignore
@@ -66,6 +67,7 @@ else:
                 
     @numba.cuda.jit(device=True)
     def random_integer_gpu(seed: np.uint64, num_steps: np.uint32) -> np.uint64:
+        seed = scramble_seed_gpu(seed)
         s0, s1 = random_integer_base_states_gpu(seed)
         for _ in range(num_steps):
             s0, s1 = random_integer_states_transition_gpu(s0, s1)
@@ -104,5 +106,28 @@ else:
     def rotl64_gpu(x: np.uint64, k: np.uint64) -> np.uint64:
         return (x << k) | (x >> (np.uint64(64) - k))
 
+    @numba.cuda.jit(device=True)
+    def scramble_seed_gpu(seed: np.uint64) -> np.uint64:
+        # adding one column and one row to avoid zero seed
+        seed += (np.uint64(1) << np.uint64(32)) + np.uint64(1)
+        # Apply a series of XOR and multiplication steps to mix the bits.
+        seed ^= (seed >> np.uint64(33))
+        seed *= np.uint64(0xff51afd7ed558ccd) # Large constant from MurmurHash3
+        seed ^= (seed >> np.uint64(33))
+        seed *= np.uint64(0xc4ceb9fe1a85ec53)  # Another mixing constant
+        seed ^= (seed >> np.uint64(33))
+        return seed
 
-
+    @numba.cuda.jit(device=False)
+    def random_integers_2_p_values_gpu(integers: DeviceNDArray, p_values: DeviceNDArray) -> None: # type: ignore
+        norm_factor = np.float64(1.0) / np.float64(2.0**64)
+        # Get the 2D indices of the current thread within the grid
+        ind_row0, ind_col0 = numba.cuda.grid(2) # type: ignore
+        # Calculate the strides
+        row_stride, col_stride = numba.cuda.gridsize(2) # type: ignore
+        for ind_row in range(ind_row0, p_values.shape[0], row_stride):
+            out_row = p_values[ind_row]
+            inp_row = integers[ind_row]
+            for ind_col in range(ind_col0, p_values.shape[1], col_stride):
+                out_row[ind_col] = (inp_row[ind_col] + np.float64(0.5)) * norm_factor
+        
