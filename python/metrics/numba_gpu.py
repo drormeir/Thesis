@@ -11,7 +11,7 @@ else:
     import numba.cuda
     from numba.cuda.cudadrv.devicearray import DeviceNDArray
     from python.hpc import HybridArray
-    from python.array_math_utils.numba_gpu import average_rows_gpu
+    from python.array_math_utils.numba_gpu import average_row_gpu
 
     def detect_signal_auc_gpu(\
             noise_input: HybridArray,\
@@ -19,7 +19,7 @@ else:
             auc_out_row: HybridArray) -> None:
         grid_shape, block_shape = signal_input_work.gpu_grid_block2D_columns_shapes(registers_per_thread=128)
         detect_signal_auc_gpu_kernel[grid_shape, block_shape](noise_input.gpu_data(), signal_input_work.gpu_data()) # type: ignore
-        average_rows_gpu(array=signal_input_work.gpu_data(), out_row=auc_out_row.gpu_data())
+        average_row_gpu(array=signal_input_work.gpu_data(), out_row=auc_out_row.gpu_data())
         grid_shape, block_shape = auc_out_row.gpu_grid_block1D_cols_shapes()
         maximize_auc_gpu_kernel[grid_shape, block_shape](auc_out_row.gpu_data()) # type: ignore
 

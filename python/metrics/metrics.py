@@ -61,7 +61,7 @@ def analyze_multi_auc(\
                             auc_out_row=auc_results.select_row(ind_model),\
                                 use_njit=use_njit)
             pbar.update(1)
-
+    auc_results.uncrop()
     if alpha_selection_method is None:
         ret = auc_results.numpy()
     elif isinstance(auc_results,str) and auc_results == 'max':
