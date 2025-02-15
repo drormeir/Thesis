@@ -6,7 +6,7 @@ if not cpu_njit_num_threads:
     from python.hpc import raise_njit_not_available
     def array_transpose_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def average_rows_cpu_njit(**kwargs) -> None: # type: ignore
+    def average_row_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
     def sort_rows_inplace_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
@@ -32,11 +32,18 @@ else:
             out[begin:end] = array[:,begin:end].T
     
     @numba.njit(parallel=True)
-    def average_rows_cpu_njit(array: np.ndarray, out_row: np.ndarray) -> None:
+    def average_row_cpu_njit(array: np.ndarray, out_row: np.ndarray) -> None:
         chunks_ranges = split2chunks(array.shape[1])
         for ind_chunck in numba.prange(chunks_ranges.shape[0]):
             begin, end = chunks_ranges[ind_chunck]
             np.mean(array[:,begin:end], axis=0, keepdims=True, out=out_row[0,begin:end])
+
+    @numba.njit(parallel=True)
+    def average_column_cpu_njit(array: np.ndarray, out_column: np.ndarray) -> None:
+        chunks_ranges = split2chunks(array.shape[0])
+        for ind_chunck in numba.prange(chunks_ranges.shape[0]):
+            begin, end = chunks_ranges[ind_chunck]
+            np.mean(array[begin:end,:], axis=1, keepdims=True, out=out_column[begin:end,0])
 
     @numba.njit(parallel=True)
     def sort_rows_inplace_cpu_njit(array: np.ndarray) -> None:

@@ -5,7 +5,9 @@ if not globals.cuda_available:
     from python.hpc import raise_cuda_not_available
     def array_transpose_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def average_rows_gpu(**kwargs) -> None: # type: ignore
+    def average_row_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
+    def average_column_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
     def sort_rows_inplace_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
@@ -29,10 +31,15 @@ else:
     def array_transpose_gpu(array: DeviceNDArray, out: DeviceNDArray) -> None:
         cupy.asarray(out)[:] = cupy.asarray(array).T # cupy.ascontiguousarray(cupy_T)
 
-    def average_rows_gpu(array: DeviceNDArray, out_row: DeviceNDArray) -> None:
+    def average_row_gpu(array: DeviceNDArray, out_row: DeviceNDArray) -> None:
         array_cupy = cupy.asarray(array)
         avg_cupy = cupy.asarray(out_row)
         cupy.mean(array_cupy, axis=0, keepdims=True, out=avg_cupy)
+
+    def average_column_gpu(array: DeviceNDArray, out_column: DeviceNDArray) -> None:
+        array_cupy = cupy.asarray(array)
+        avg_cupy = cupy.asarray(out_column)
+        cupy.mean(array_cupy, axis=1, keepdims=True, out=avg_cupy)
 
     def sort_rows_inplace_gpu(array: DeviceNDArray) -> None:
         cupy.asarray(array).sort(axis=1)
