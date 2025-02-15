@@ -368,6 +368,7 @@ class HybridArray:
         if self.dtype() == dtype:
             return self
         data_shape = self.shape()
+        self.data = None  # erase the reference to the old data
         with warnings.catch_warnings():
             if suppress_warning:
                 warnings.simplefilter("ignore", RuntimeWarning)
@@ -381,6 +382,8 @@ class HybridArray:
     
     def reshape(self, shape, inplace: bool = True) -> 'HybridArray':
         assert inplace
+        if shape == self.shape():
+            return self
         size = np.uint64(np.prod(shape))
         if self.original_numpy_data is not None:
             self.data = self.original_numpy_data.reshape(-1)[:size].reshape(shape)
@@ -408,6 +411,8 @@ class HybridArray:
     
     def size(self) -> np.uint64:
         shape = self.shape()
+        if not shape or len(shape) < 1:
+            return np.uint64(0)
         return np.uint64(np.prod(shape))
     
     def ndim(self) -> int:
@@ -415,7 +420,8 @@ class HybridArray:
         return len(shape)
     
     def shape(self) -> tuple:
-        assert self.data is not None
+        if self.data is None:
+            return ()
         return self.data.shape
     
     def nrows(self) -> np.uint32:
