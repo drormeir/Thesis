@@ -12,9 +12,9 @@ def random_modified_p_values_matrix_py(num_steps: np.uint32, offset_row0: np.uin
     modify_p_values_matrix_py(out=out, mu=mu)
 
 def random_p_values_matrix_py(num_steps: np.uint32, offset_row0: np.uint32, offset_col0: np.uint32, out: np.ndarray) -> None:
-    random_integers_matrix_py(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=out)
-    out += np.float64(0.5)
-    out /= np.float64(2.0**64)
+    integers = np.empty_like(out, dtype=np.uint64)
+    random_integers_matrix_py(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=integers)
+    out[:] = (integers+np.float64(0.5)) / np.float64(2.0**64)
 
 
 def random_p_values_series_py(seed: np.uint64, out: np.ndarray) -> None:
