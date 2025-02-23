@@ -393,9 +393,9 @@ class HybridArray:
     
     def crop(self, row0: int|np.uint32, row1: int|np.uint32, col0: int|np.uint32, col1: int|np.uint32) -> 'HybridArray':
         if self.original_numpy_data is not None:
-            self.data = self.original_numpy_data[row0:row1][col0:col1]
+            self.data = self.original_numpy_data[row0:row1,col0:col1]
         elif self.original_numba_data is not None:
-            self.data = self.original_numba_data[row0:row1][col0:col1]
+            self.data = self.original_numba_data[row0:row1,col0:col1]
         return self
     
     def uncrop(self) -> 'HybridArray':
