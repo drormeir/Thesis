@@ -1,7 +1,7 @@
 import itertools
 import numpy as np
 from tqdm import tqdm
-from python.hpc import globals, raise_cuda_not_available, raise_njit_not_available, HybridArray
+from python.hpc import use_njit, HybridArray
 from python.metrics.numba_gpu import detect_signal_auc_gpu
 from python.metrics.numba_cpu import detect_signal_auc_cpu_njit
 from python.metrics.python_native import detect_signal_auc_py
@@ -43,7 +43,6 @@ def analyze_multi_auc(\
     assert len(n1s) == len(mus)
     num_executions = len(n1s)
     use_gpu = kwargs.get('use_gpu', None)
-    use_njit = kwargs.get('use_njit', None)
     auc_results = HybridArray().realloc(shape=(num_executions,N), dtype=np.float64, use_gpu=use_gpu)
     with (HybridArray() as noise,\
             HybridArray() as signal,\
@@ -59,7 +58,7 @@ def analyze_multi_auc(\
                 **kwargs)
             detect_signal_auc(noise_input=noise, signal_input_work=signal,\
                             auc_out_row=auc_results.select_row(ind_model),\
-                                use_njit=use_njit)
+                                **kwargs)
             pbar.update(1)
     auc_results.uncrop()
     if alpha_selection_method is None:
@@ -82,7 +81,6 @@ def create_noise_4_auc(noise: HybridArray,\
                        ind_model: int=0,
                        **kwargs) -> None:
     use_gpu = kwargs.get('use_gpu', None)
-    use_njit = kwargs.get('use_njit', None)
     noise.realloc(shape=(num_monte,N), dtype=np.float64, use_gpu=use_gpu)
     rare_weak_null_hypothesis(sorted_p_values_output=noise, ind_model=ind_model,\
                               **kwargs)
@@ -90,14 +88,15 @@ def create_noise_4_auc(noise: HybridArray,\
         sorted_p_values_input_output=noise,
         num_discoveries_output=None,\
         **kwargs)
-    array_transpose_inplace(noise, use_njit=use_njit)
-    sort_rows_inplace(noise, use_njit=use_njit)
+    array_transpose_inplace(noise, **kwargs)
+    sort_rows_inplace(noise, **kwargs)
 
 
 def create_signal_4_auc(signal: HybridArray,\
                        num_monte: int, N: int,\
                         ind_model: int,\
-                        n1: np.uint32|int, mu: np.float64|np.float32|float,\
+                        n1: np.uint32|int,\
+                        mu: np.float64|np.float32|float,\
                         **kwargs) -> None:
     use_gpu = kwargs.get('use_gpu', None)
     signal.realloc(shape=(num_monte,N), dtype=np.float64, use_gpu=use_gpu)
@@ -115,7 +114,7 @@ def detect_signal_auc(\
         noise_input: HybridArray,\
         signal_input_work: HybridArray,\
         auc_out_row: HybridArray,\
-        use_njit: bool|None = None) -> None:
+        **kwargs) -> None:
     assert signal_input_work.is_gpu() == noise_input.is_gpu()
     assert signal_input_work.is_gpu() == auc_out_row.is_gpu()
     noise_shape = noise_input.shape()
@@ -128,7 +127,7 @@ def detect_signal_auc(\
         detect_signal_auc_gpu(noise_input, signal_input_work, auc_out_row)
     else:
         # CPU mode
-        if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
+        if use_njit(**kwargs):
             detect_signal_auc_cpu_njit(\
                 noise_input.numpy(),\
                 signal_input_work.numpy(), auc_out_row.numpy())

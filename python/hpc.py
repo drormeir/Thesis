@@ -582,6 +582,11 @@ def calc_block_size(data_size: int|np.uint64|np.uint32,\
 ############################################################3
 globals.cpu_njit_num_threads = init_njit()
 
+def use_njit(**kwargs) -> bool:
+    if globals.cpu_njit_num_threads < 1:
+        return False
+    val = kwargs.get('use_njit', None)
+    return val is None or val
 
 globals.cuda_available = init_cuda()
 

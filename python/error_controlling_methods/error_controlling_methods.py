@@ -1,12 +1,12 @@
 import numpy as np
-from python.hpc import globals, raise_cuda_not_available, raise_njit_not_available, HybridArray
+from python.hpc import use_njit, HybridArray
 from python.error_controlling_methods.numba_gpu import benjamini_hochberg_gpu, bonferroni_gpu, topk_gpu
 from python.error_controlling_methods.numba_cpu import benjamini_hochberg_cpu_njit, bonferroni_cpu_njit, topk_cpu_njit
 from python.error_controlling_methods.python_native import benjamini_hochberg_py, bonferroni_py, topk_py
 
 def topk(sorted_p_values_input: HybridArray,\
                num_discoveries_output: HybridArray,\
-               use_njit: bool|None = None) -> None:
+               **kwargs) -> None:
     num_discoveries_output.realloc(like=sorted_p_values_input, dtype=np.uint32)
     if num_discoveries_output.is_gpu():
         # GPU mode
@@ -14,7 +14,7 @@ def topk(sorted_p_values_input: HybridArray,\
         topk_gpu[grid_shape, block_shape](sorted_p_values_input.gpu_data(), num_discoveries_output.gpu_data()) # type: ignore
     else:
         # CPU mode
-        if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
+        if use_njit(**kwargs):
             topk_cpu_njit(sorted_p_values_input=sorted_p_values_input.numpy(),\
                           num_discoveries_output=num_discoveries_output.numpy())
         else:
@@ -24,7 +24,7 @@ def topk(sorted_p_values_input: HybridArray,\
 
 def bonferroni(sorted_p_values_input: HybridArray,\
                num_discoveries_output: HybridArray,\
-               use_njit: bool|None = None) -> None:
+               **kwargs) -> None:
     num_discoveries_output.realloc(like=sorted_p_values_input, dtype=np.uint32)
     if num_discoveries_output.is_gpu():
         # GPU mode
@@ -32,7 +32,7 @@ def bonferroni(sorted_p_values_input: HybridArray,\
         bonferroni_gpu[grid_shape, block_shape](sorted_p_values_input.gpu_data(), num_discoveries_output.gpu_data()) # type: ignore
     else:
         # CPU mode
-        if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
+        if use_njit(**kwargs):
             bonferroni_cpu_njit(sorted_p_values_input=sorted_p_values_input.numpy(),\
                                 num_discoveries_output=num_discoveries_output.numpy())
         else:
@@ -41,7 +41,7 @@ def bonferroni(sorted_p_values_input: HybridArray,\
             
 def benjamini_hochberg(sorted_p_values_input: HybridArray,\
                num_discoveries_output: HybridArray,\
-               use_njit: bool|None = None) -> None:
+               **kwargs) -> None:
     num_discoveries_output.realloc(like=sorted_p_values_input, dtype=np.uint32)
     if num_discoveries_output.is_gpu():
                 # GPU mode
@@ -49,7 +49,7 @@ def benjamini_hochberg(sorted_p_values_input: HybridArray,\
         benjamini_hochberg_gpu[grid_shape, block_shape](sorted_p_values_input.gpu_data(), num_discoveries_output.gpu_data()) # type: ignore
     else:
         # CPU mode
-        if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
+        if use_njit(**kwargs):
             benjamini_hochberg_cpu_njit(sorted_p_values_input=sorted_p_values_input.numpy(),\
                                 num_discoveries_output=num_discoveries_output.numpy())
         else:

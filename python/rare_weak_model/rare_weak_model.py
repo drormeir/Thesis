@@ -1,5 +1,5 @@
 import numpy as np
-from python.hpc import globals, raise_cuda_not_available, raise_njit_not_available, HybridArray
+from python.hpc import use_njit, HybridArray
 from python.rare_weak_model.python_native import random_p_values_matrix_py, random_p_values_series_py, random_modified_p_values_matrix_py, modify_p_values_matrix_py, sort_and_count_labels_rows_py
 from python.rare_weak_model.numba_cpu import random_p_values_matrix_cpu_njit, random_p_values_series_cpu_njit, random_modified_p_values_matrix_cpu_njit, modify_p_values_matrix_cpu_njit, sort_and_count_labels_rows_cpu_njit
 from python.rare_weak_model.numba_gpu import random_p_values_matrix_gpu, random_p_values_series_gpu, random_modified_p_values_matrix_gpu, modify_p_values_matrix_gpu, sort_and_count_labels_rows_gpu
@@ -15,6 +15,7 @@ def rare_weak_null_hypothesis(\
         offset_row0= np.uint32(ind_model) * sorted_p_values_output.nrows(),\
         offset_col0=0,\
         **kwargs)
+    
     sort_rows_inplace(array=sorted_p_values_output, **kwargs)
     
 def rare_weak_model(\
@@ -42,7 +43,7 @@ def sort_and_count_labels_rows(\
         sorted_p_values_inoutput: HybridArray,\
         cumulative_counts_output: HybridArray,\
         n1: int|np.uint32,\
-        use_njit: bool|None = None) -> None:
+        **kwargs) -> None:
     if n1 < 1:
         return
     cumulative_counts_output.realloc(like=sorted_p_values_inoutput, dtype=np.uint32)
@@ -53,7 +54,7 @@ def sort_and_count_labels_rows(\
                                        counts=cumulative_counts_output.gpu_data())
     else:
         # CPU mode
-        if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
+        if use_njit(**kwargs):
             sort_and_count_labels_rows_cpu_njit(data=sorted_p_values_inoutput.numpy(), n1=n1,\
                                                 counts=cumulative_counts_output.numpy())
         else:
@@ -65,12 +66,11 @@ def random_modified_p_values_matrix(\
         mu: float|np.float64,\
         offset_row0: int|np.uint32,\
         offset_col0: int|np.uint32,\
-        num_steps: int|np.uint32|None=None,\
-        use_njit: bool|None = None) -> None:
+        **kwargs) -> None:
     p_values_output.astype(np.float64)
     offset_row0 = np.uint32(offset_row0)
     offset_col0 = np.uint32(offset_col0)
-    num_steps = random_num_steps(num_steps)
+    num_steps = random_num_steps(**kwargs)
     mu = np.float64(mu)
     if p_values_output.is_gpu():
         # GPU mode
@@ -78,7 +78,7 @@ def random_modified_p_values_matrix(\
         random_modified_p_values_matrix_gpu[grid_shape, block_shape](num_steps, offset_row0, offset_col0, mu, p_values_output.gpu_data()) # type: ignore
     else:
         # CPU mode
-        if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
+        if use_njit(**kwargs):
             random_modified_p_values_matrix_cpu_njit(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, mu=mu, out=p_values_output.numpy())
         else:
             random_modified_p_values_matrix_py(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, mu=mu, out=p_values_output.numpy())
@@ -87,7 +87,7 @@ def modify_p_values_submatrix(\
         p_values_inoutput: HybridArray,\
         mu: float|np.float64|np.float32,\
         n1: int|np.uint32,\
-        use_njit: bool|None = None) -> None:
+        **kwargs) -> None:
     rows, N = p_values_inoutput.shape()
     assert 0 <= n1 <= N
     if n1 < 1:
@@ -101,7 +101,7 @@ def modify_p_values_submatrix(\
         modify_p_values_matrix_gpu[grid_shape, block_shape](data.gpu_data(), mu) # type: ignore
     else:
         # CPU mode
-        if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
+        if use_njit(**kwargs):
             modify_p_values_matrix_cpu_njit(out=data.numpy(), mu=mu)
         else:
             modify_p_values_matrix_py(out=data.numpy(), mu=mu)
@@ -110,26 +110,26 @@ def modify_p_values_submatrix(\
 def random_p_values_matrix(p_values_output: HybridArray,\
                            offset_row0: int|np.uint32,\
                            offset_col0: int|np.uint32,\
-                           num_steps: int|np.uint32|None = None,\
-                           use_njit: bool|None = None) -> None:
+                           **kwargs) -> None:
     p_values_output.astype(np.float64)
     offset_row0 = np.uint32(offset_row0)
     offset_col0 = np.uint32(offset_col0)
-    num_steps = random_num_steps(num_steps)
+    
+    num_steps = random_num_steps(**kwargs)
     if p_values_output.is_gpu():
         # GPU mode
         grid_shape, block_shape = p_values_output.gpu_grid_block2D_square_shapes()
         random_p_values_matrix_gpu[grid_shape, block_shape](num_steps, offset_row0, offset_col0, p_values_output.gpu_data()) # type: ignore
     else:
         # CPU mode
-        if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
+        if use_njit(**kwargs):
             random_p_values_matrix_cpu_njit(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=p_values_output.numpy())
         else:
             random_p_values_matrix_py(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=p_values_output.numpy())
 
 
 
-def random_p_values_series(p_values_output: HybridArray, seed: int|np.uint64, use_njit: bool|None = None) -> None:
+def random_p_values_series(p_values_output: HybridArray, seed: int|np.uint64, **kwargs) -> None:
     p_values_output.astype(np.float64)
     seed = np.uint64(seed)
     assert p_values_output.ndim() == 1
@@ -138,7 +138,7 @@ def random_p_values_series(p_values_output: HybridArray, seed: int|np.uint64, us
         random_p_values_series_gpu[1, 1](seed, p_values_output.gpu_data()) # type: ignore
     else:
         # CPU mode
-        if globals.cpu_njit_num_threads and (use_njit is None or use_njit):
+        if use_njit(**kwargs):
             random_p_values_series_cpu_njit(seed=seed, out=p_values_output.numpy())
         else:
             random_p_values_series_py(seed=seed, out=p_values_output.numpy())
