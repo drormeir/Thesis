@@ -3,7 +3,7 @@ from python.hpc import globals
 if not globals.cpu_njit_num_threads:
     # Mock API
     from python.hpc import raise_njit_not_available
-    def higher_criticism_stable_cpu_njit(**kwargs) -> None: # type: ignore
+    def higher_criticism_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
     def higher_criticism_unstable_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
@@ -15,7 +15,7 @@ else:
     import numba
 
     @numba.njit(parallel=True)
-    def higher_criticism_stable_cpu_njit(\
+    def higher_criticism_cpu_njit(\
             sorted_p_values_input_output: np.ndarray) -> None:
         _, N = sorted_p_values_input_output.shape
         p_base_line = np.arange(1,N+1, dtype=np.float64).reshape(1,-1)/(N+1)

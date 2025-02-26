@@ -2,7 +2,7 @@ import math
 import numpy as np
 from scipy.stats import beta
 
-def higher_criticism_stable_py(\
+def higher_criticism_py(\
         sorted_p_values_input_output: np.ndarray) -> None:
     _, N = sorted_p_values_input_output.shape
     p_base_line = np.arange(1,N+1, dtype=np.float64).reshape(1,-1)/(N+1)

@@ -1,8 +1,8 @@
 import numpy as np
 from python.hpc import use_njit, HybridArray
-from python.adaptive_methods.numba_gpu import higher_criticism_stable_gpu, higher_criticism_unstable_gpu, berk_jones_gpu
-from python.adaptive_methods.numba_cpu import higher_criticism_stable_cpu_njit, higher_criticism_unstable_cpu_njit, berk_jones_cpu_njit
-from python.adaptive_methods.python_native import higher_criticism_stable_py, higher_criticism_unstable_py, berk_jones_py
+from python.adaptive_methods.numba_gpu import higher_criticism_gpu, higher_criticism_unstable_gpu, berk_jones_gpu
+from python.adaptive_methods.numba_cpu import higher_criticism_cpu_njit, higher_criticism_unstable_cpu_njit, berk_jones_cpu_njit
+from python.adaptive_methods.python_native import higher_criticism_py, higher_criticism_unstable_py, berk_jones_py
 from python.array_math_utils.array_math_utils import cumulative_argmin, cumulative_min_inplace, cumulative_dominant_argmin, cumulative_dominant_min_inplace
 
 
@@ -27,8 +27,8 @@ def apply_transform_method(\
         sorted_p_values_input_output: HybridArray,\
         transform_method: str,\
         **kwargs) -> None:
-    if transform_method == 'higher_criticism_stable':
-        higher_criticism_stable(sorted_p_values_input_output,**kwargs)
+    if transform_method == 'higher_criticism':
+        higher_criticism(sorted_p_values_input_output,**kwargs)
     elif transform_method == 'higher_criticism_unstable':
         higher_criticism_unstable(sorted_p_values_input_output,**kwargs)
     elif transform_method == 'berk_jones':
@@ -38,17 +38,17 @@ def apply_transform_method(\
     else:
         assert False, f'{transform_method=}'
         
-def higher_criticism_stable(sorted_p_values_input_output: HybridArray, **kwargs) -> None:
+def higher_criticism(sorted_p_values_input_output: HybridArray, **kwargs) -> None:
     if sorted_p_values_input_output.is_gpu():
         # GPU mode
         grid_shape, block_shape = sorted_p_values_input_output.gpu_grid_block2D_square_shapes()
-        higher_criticism_stable_gpu[grid_shape, block_shape](sorted_p_values_input_output.gpu_data()) # type: ignore
+        higher_criticism_gpu[grid_shape, block_shape](sorted_p_values_input_output.gpu_data()) # type: ignore
     else:
         # CPU mode
         if use_njit(**kwargs):
-            higher_criticism_stable_cpu_njit(sorted_p_values_input_output=sorted_p_values_input_output.numpy())
+            higher_criticism_cpu_njit(sorted_p_values_input_output=sorted_p_values_input_output.numpy())
         else:
-            higher_criticism_stable_py(sorted_p_values_input_output=sorted_p_values_input_output.numpy())
+            higher_criticism_py(sorted_p_values_input_output=sorted_p_values_input_output.numpy())
 
 def higher_criticism_unstable(sorted_p_values_input_output: HybridArray, **kwargs) -> None:
     if sorted_p_values_input_output.is_gpu():

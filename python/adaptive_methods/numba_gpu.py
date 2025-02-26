@@ -3,7 +3,7 @@ from python.hpc import globals
 if not globals.cpu_njit_num_threads:
     # Mock API
     from python.hpc import raise_cuda_not_available
-    def higher_criticism_stable_gpu(**kwargs) -> None: # type: ignore
+    def higher_criticism_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
     def higher_criticism_unstable_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
@@ -17,7 +17,7 @@ else:
     from numba.cuda.cudadrv.devicearray import DeviceNDArray
 
     @numba.cuda.jit(device=False)
-    def higher_criticism_stable_gpu(\
+    def higher_criticism_gpu(\
         sorted_p_values_input_output: DeviceNDArray) -> None:
         # Get the 2D indices of the current thread within the grid
         ind_row0, ind_col0 = numba.cuda.grid(2) # type: ignore

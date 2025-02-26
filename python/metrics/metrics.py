@@ -83,19 +83,20 @@ def test_speed_neto_detect_signal_auc(\
         mu: float|np.float64|np.float32,\
         num_executions: int,\
         transform_method: str ='identity',
-        detect_signal: bool = True,\
         create_signal: bool = True,\
+        detect_signal: bool = True,\
         **kwargs) -> None:
     use_gpu = kwargs.get('use_gpu', None)
+    desc = f'Test Speed Detect Signal AUC {transform_method=} {create_signal=} {detect_signal=}'
     with (
-        HybridArray() as auc_results,\
+        HybridArray().realloc(shape=(1,N), dtype=np.float64, use_gpu=use_gpu) as auc_results,\
         HybridArray() as noise,\
         HybridArray().realloc(shape=(num_monte,N), dtype=np.float64, use_gpu=use_gpu) as signal):
         create_noise_4_auc(noise=noise, N=N, ind_model=num_executions, num_monte=num_monte,\
                            transform_method=transform_method, **kwargs)
         if not create_signal:
             array_transpose(array=noise, out=signal, **kwargs)
-        for ind_execution in tqdm(range(num_executions), desc="Test Speed Detect Signal AUC", unit="step"):
+        for ind_execution in tqdm(range(num_executions), desc=desc, unit="step"):
             if create_signal:
                 create_signal_4_auc(\
                     signal=signal, N=N, num_monte=num_monte,\
@@ -103,12 +104,9 @@ def test_speed_neto_detect_signal_auc(\
                     transform_method=transform_method,\
                     **kwargs)
             if detect_signal:
-                detect_signal_auc(noise_input=noise, signal_input_work=signal,\
-                                auc_out_row=auc_results,\
-                                    **kwargs)
-            print(f'Done iter {ind_execution+1} out of {num_executions}')
-    print('Done!')
-
+                detect_signal_auc(noise_input=noise, signal_input_work=signal, auc_out_row=auc_results, **kwargs)
+            pass
+        pass
 
 def create_noise_4_auc(noise: HybridArray,\
                        num_monte: int, N: int,\
