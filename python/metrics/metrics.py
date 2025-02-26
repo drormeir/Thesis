@@ -7,7 +7,7 @@ from python.metrics.numba_cpu import detect_signal_auc_cpu_njit
 from python.metrics.python_native import detect_signal_auc_py
 from python.rare_weak_model.rare_weak_model import rare_weak_null_hypothesis, rare_weak_model
 from python.adaptive_methods.adaptive_methods import apply_transform_discovery_method
-from python.array_math_utils.array_math_utils import array_transpose_inplace, sort_rows_inplace, max_along_rows
+from python.array_math_utils.array_math_utils import array_transpose_inplace, sort_rows_inplace, max_along_rows, array_transpose
 
 def analyze_auc_r_beta_ranges(\
         N: int,\
@@ -76,6 +76,40 @@ def analyze_multi_auc(\
         assert False, f'{alpha_selection_method=}'
     return ret
 
+def test_speed_neto_detect_signal_auc(\
+        N: int,\
+        num_monte: int,\
+        n1: int|np.uint32,\
+        mu: float|np.float64|np.float32,\
+        num_executions: int,\
+        transform_method: str ='identity',
+        detect_signal: bool = True,\
+        create_signal: bool = True,\
+        **kwargs) -> None:
+    use_gpu = kwargs.get('use_gpu', None)
+    with (
+        HybridArray() as auc_results,\
+        HybridArray() as noise,\
+        HybridArray().realloc(shape=(num_monte,N), dtype=np.float64, use_gpu=use_gpu) as signal):
+        create_noise_4_auc(noise=noise, N=N, ind_model=num_executions, num_monte=num_monte,\
+                           transform_method=transform_method, **kwargs)
+        if not create_signal:
+            array_transpose(array=noise, out=signal, **kwargs)
+        for ind_execution in tqdm(range(num_executions), desc="Test Speed Detect Signal AUC", unit="step"):
+            if create_signal:
+                create_signal_4_auc(\
+                    signal=signal, N=N, num_monte=num_monte,\
+                    ind_model=ind_execution, n1=n1, mu=mu,\
+                    transform_method=transform_method,\
+                    **kwargs)
+            if detect_signal:
+                detect_signal_auc(noise_input=noise, signal_input_work=signal,\
+                                auc_out_row=auc_results,\
+                                    **kwargs)
+            print(f'Done iter {ind_execution+1} out of {num_executions}')
+    print('Done!')
+
+
 def create_noise_4_auc(noise: HybridArray,\
                        num_monte: int, N: int,\
                        ind_model: int=0,
@@ -115,10 +149,11 @@ def detect_signal_auc(\
         signal_input_work: HybridArray,\
         auc_out_row: HybridArray,\
         **kwargs) -> None:
+    signal_shape = signal_input_work.shape()
+    auc_out_row.realloc(like=signal_input_work, shape=(1,signal_shape[1]))
     assert signal_input_work.is_gpu() == noise_input.is_gpu()
     assert signal_input_work.is_gpu() == auc_out_row.is_gpu()
     noise_shape = noise_input.shape()
-    signal_shape = signal_input_work.shape()
     auc_shape = auc_out_row.shape()
     assert noise_shape[0] == signal_shape[1], f'{noise_shape=} {signal_shape=}'
     assert auc_shape == (1,signal_shape[1]), f'{auc_shape=}'

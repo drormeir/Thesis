@@ -33,6 +33,8 @@ def apply_transform_method(\
         higher_criticism_unstable(sorted_p_values_input_output,**kwargs)
     elif transform_method == 'berk_jones':
         berk_jones(sorted_p_values_input_output,**kwargs)
+    elif transform_method == 'identity':
+        return
     else:
         assert False, f'{transform_method=}'
         
