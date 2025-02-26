@@ -262,21 +262,16 @@ class HybridArray:
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         self.close()
         
-    def close(self, gpu_garbage_collect: bool = True) -> None:
-        if self.data is not None:
-            del self.data
-        if self.original_numpy_data is not None:
-            del self.original_numpy_data
-        if self.original_numba_data is not None:
-            del self.original_numba_data
-            if gpu_garbage_collect:
-                cuda_garbage_collect()
+    def close(self, garbage_collect: bool = True) -> None:
         self._clear_state()
+        if garbage_collect:
+            cuda_garbage_collect()
 
     def _clear_state(self) -> None:
+        # dereferencing self.data (view) BEFORE any self.original_data
+        self.data: np.ndarray | DeviceNDArray | None = None
         self.original_numpy_data: np.ndarray | None = None
         self.original_numba_data: DeviceNDArray | None = None
-        self.data: np.ndarray | DeviceNDArray | None = None
 
     def realloc_like(self, other: 'HybridArray') -> 'HybridArray':
         return self.realloc(shape=other.shape(), dtype=other.dtype(), use_gpu=other.is_gpu())
