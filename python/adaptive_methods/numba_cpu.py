@@ -9,6 +9,8 @@ if not globals.cpu_njit_num_threads:
         raise_njit_not_available()
     def berk_jones_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
+    def calc_lgamma_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
 else:
     import math
     import numpy as np
@@ -34,18 +36,20 @@ else:
 
     @numba.njit(parallel=True)
     def berk_jones_cpu_njit(\
-            sorted_p_values_input_output: np.ndarray) -> None:
+            sorted_p_values_input_output: np.ndarray,\
+            lgamma_cache: np.ndarray) -> None:
         num_monte, N = sorted_p_values_input_output.shape
         for row in numba.prange(num_monte):
             data_row = sorted_p_values_input_output[row,:]
             for col in range(N):
-                a = np.float64(col+1)
-                b = np.float64(N-col)
-                data_row[col] = beta_cdf_cpu_njit(data_row[col],a,b, np.uint32(2000), np.float64(1e-20), np.float64(1e-30))
+                a = np.uint32(col+1)
+                b = np.uint32(N-col)
+                data_row[col] = beta_cdf_cpu_njit(lgamma_cache, data_row[col],a,b, np.uint32(2000), np.float64(1e-20), np.float64(1e-30))
 
     @numba.njit(parallel=False)
     def beta_cdf_cpu_njit(\
-        x: np.float64, a: np.float64, b: np.float64,\
+        lgamma_cache: np.ndarray,\
+        x: np.float64, int_a: np.uint32, int_b: np.uint32,\
         max_iter: np.uint32,\
         eps: np.float64, tiny: np.float64) -> np.float64:
         """
@@ -60,11 +64,13 @@ else:
         zero = np.float64(0.0)
         one = np.float64(1.0)
         two = np.float64(2.0)
+        a = np.float64(int_a)
+        b = np.float64(int_b)
         if x > (a+one)/(a+b+two):
             # Use the fact that beta is symmetrical.
-            return one-beta_cdf_cpu_njit(one-x,b,a,max_iter,eps,tiny) 
+            return one-beta_cdf_cpu_njit(lgamma_cache,one-x,int_b,int_a,max_iter,eps,tiny) 
         # Find the first part before the continued fraction.
-        lbeta_ab = math.lgamma(a)+math.lgamma(b)-math.lgamma(a+b)
+        lbeta_ab = lgamma_cache[int_a] + lgamma_cache[int_b] - lgamma_cache[int_a+int_b]
         front = math.exp(math.log(x)*a+math.log(one-x)*b-lbeta_ab) / a
         
         # Use Lentz's algorithm to evaluate the continued fraction.
@@ -100,4 +106,11 @@ else:
             if abs(one-cd) < eps:
                 return front * (f-one)
         return -one # did not converge!!!
-
+    
+    @numba.njit(parallel=False)
+    def calc_lgamma_cpu_njit(lgamma_cache: np.ndarray) -> None:
+        N = lgamma_cache.shape[0]
+        lgamma_cache[0] = np.float64(0.0) # dummy
+        lgamma_cache[1] = np.float64(0.0) # lgamma(1) = log(0!)
+        for ind_col in range(2,N):
+            lgamma_cache[ind_col] = lgamma_cache[ind_col-1] + math.log(np.float64(ind_col-1))

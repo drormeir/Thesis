@@ -27,3 +27,5 @@ def berk_jones_py(\
         x = sorted_p_values_input_output[:,col]
         sorted_p_values_input_output[:,col] = beta.cdf(x,a,b)
 
+def calc_lgamma_py(lgamma_cache: np.ndarray) -> None:
+    lgamma_cache[:] = np.array([0] + [math.lgamma(np.float64(i)) for i in range(1,lgamma_cache.size)], dtype=np.float64)

@@ -1,9 +1,9 @@
 import numpy as np
 from tqdm import tqdm
 from python.hpc import use_njit, HybridArray
-from python.adaptive_methods.numba_gpu import higher_criticism_gpu, higher_criticism_unstable_gpu, berk_jones_gpu
-from python.adaptive_methods.numba_cpu import higher_criticism_cpu_njit, higher_criticism_unstable_cpu_njit, berk_jones_cpu_njit
-from python.adaptive_methods.python_native import higher_criticism_py, higher_criticism_unstable_py, berk_jones_py
+from python.adaptive_methods.numba_gpu import higher_criticism_gpu, higher_criticism_unstable_gpu, berk_jones_gpu, calc_lgamma_gpu
+from python.adaptive_methods.numba_cpu import higher_criticism_cpu_njit, higher_criticism_unstable_cpu_njit, berk_jones_cpu_njit, calc_lgamma_cpu_njit
+from python.adaptive_methods.python_native import higher_criticism_py, higher_criticism_unstable_py, berk_jones_py, calc_lgamma_py
 from python.array_math_utils.array_math_utils import cumulative_argmin, cumulative_min_inplace, cumulative_dominant_argmin, cumulative_dominant_min_inplace
 from python.rare_weak_model.rare_weak_model import rare_weak_null_hypothesis
 
@@ -14,16 +14,23 @@ def test_speed_transforms(\
         num_executions: int,\
         use_gpu: bool|None=None,\
         transform_method: str ='identity',
+        lgamma_cache: HybridArray|None=None,\
         **kwargs) -> None:
     desc = f'Test Speed Transforms {transform_method=}'
+    local_lgamma = lgamma_cache is None
+    if local_lgamma:
+        lgamma_cache = HybridArray()
     with HybridArray().realloc(shape=(num_monte,N), dtype=np.float64, use_gpu=use_gpu) as noise:
         for ind_execution in tqdm(range(num_executions), desc=desc, unit="step"):
             rare_weak_null_hypothesis(sorted_p_values_output=noise, ind_model=ind_execution, **kwargs)
             apply_transform_method(sorted_p_values_input_output=noise,\
                                    transform_method=transform_method,\
+                                   lgamma_cache = lgamma_cache,\
                                    **kwargs)
             pass
         pass
+    if local_lgamma:
+        lgamma_cache.close()
 
 
 def test_speed_berk_jones(\
@@ -31,15 +38,21 @@ def test_speed_berk_jones(\
         num_monte: int,\
         num_executions: int,\
         use_gpu: bool|None=None,\
+        lgamma_cache: HybridArray|None=None,\
         **kwargs) -> None:
     is_njit = use_njit(**kwargs)
     desc = f'Test Speed Berk Jones {use_gpu=} use_njit={is_njit}'
+    local_lgamma = lgamma_cache is None
+    if local_lgamma:
+        lgamma_cache = HybridArray()
     with HybridArray().realloc(shape=(num_monte,N), dtype=np.float64, use_gpu=use_gpu) as noise:
         for ind_execution in tqdm(range(num_executions), desc=desc, unit="step"):
             rare_weak_null_hypothesis(sorted_p_values_output=noise, ind_model=ind_execution, **kwargs)
-            berk_jones(sorted_p_values_input_output=noise,**kwargs)
+            berk_jones(sorted_p_values_input_output=noise,lgamma_cache=lgamma_cache,**kwargs)
             pass
         pass
+    if local_lgamma:
+        lgamma_cache.close()
 
 
 def apply_transform_discovery_method(\
@@ -104,20 +117,45 @@ def higher_criticism_unstable(sorted_p_values_input_output: HybridArray, **kwarg
 
 def berk_jones(\
         sorted_p_values_input_output: HybridArray,\
+        lgamma_cache: HybridArray|None = None,\
         **kwargs) -> None:
+    local_lgamma = lgamma_cache is None
+    if local_lgamma:
+        lgamma_cache = HybridArray()
+    calc_lgamma(lgamma_cache, sorted_p_values_input_output.ncols(), use_gpu=sorted_p_values_input_output.is_gpu())
     if sorted_p_values_input_output.is_gpu():
         # GPU mode
         debug = kwargs.get('debug_berk_jones_gpu_block_size', None)
         grid_shape, block_shape =\
-            sorted_p_values_input_output.gpu_grid_block2D_square_shapes(\
-                registers_per_thread=256, debug=debug)
-        berk_jones_gpu[grid_shape, block_shape](sorted_p_values_input_output.gpu_data()) # type: ignore
+            sorted_p_values_input_output.gpu_grid_block2D_square_shapes(registers_per_thread=256, debug=debug)
+        berk_jones_gpu[grid_shape, block_shape](sorted_p_values_input_output.gpu_data(), lgamma_cache.gpu_data()) # type: ignore
     else:
         # CPU mode
         if use_njit(**kwargs):
-            berk_jones_cpu_njit(sorted_p_values_input_output=sorted_p_values_input_output.numpy())
+            berk_jones_cpu_njit(sorted_p_values_input_output=sorted_p_values_input_output.numpy(),\
+                                lgamma_cache=lgamma_cache.numpy())
         else:
             berk_jones_py(sorted_p_values_input_output=sorted_p_values_input_output.numpy())
+    if local_lgamma:
+        lgamma_cache.close()
+
+
+def calc_lgamma(lgamma_cache: HybridArray, N: int|np.uint32, use_gpu: bool, **kwargs) -> None:
+    # because I want to calc from lgamma(1) to lgamma(N+1) inclusive and put them in the same indexes
+    N += 2
+    if N <= lgamma_cache.size():
+        return
+    lgamma_cache.realloc(shape=(N,), dtype=np.float64, use_gpu=use_gpu)
+    if use_gpu:
+        # GPU mode
+        calc_lgamma_gpu[1, 1](lgamma_cache.gpu_data()) # type: ignore
+    else:
+        # CPU mode
+        if use_njit(**kwargs):
+            calc_lgamma_cpu_njit(lgamma_cache.numpy())
+        else:
+            calc_lgamma_py(lgamma_cache.numpy())
+
 
 
 def apply_discovery_method_on_transformation(\
