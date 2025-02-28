@@ -1,7 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 from python.hpc import use_njit, HybridArray
-from python.adaptive_methods.numba_gpu import higher_criticism_gpu, higher_criticism_unstable_gpu, berk_jones_gpu, calc_lgamma_gpu
+from python.adaptive_methods.numba_gpu import higher_criticism_gpu, higher_criticism_unstable_gpu, berk_jones_gpu, calc_lgamma_gpu, berk_jones_gpu_max_iter, berk_jones_legacy_gpu_max_iter
 from python.adaptive_methods.numba_cpu import higher_criticism_cpu_njit, higher_criticism_unstable_cpu_njit, berk_jones_cpu_njit, calc_lgamma_cpu_njit
 from python.adaptive_methods.python_native import higher_criticism_py, higher_criticism_unstable_py, berk_jones_py, calc_lgamma_py
 from python.array_math_utils.array_math_utils import cumulative_argmin, cumulative_min_inplace, cumulative_dominant_argmin, cumulative_dominant_min_inplace
@@ -54,6 +54,28 @@ def test_speed_berk_jones(\
     if local_lgamma:
         lgamma_cache.close()
 
+
+def berk_jones_max_iter(\
+        max_iter_output: HybridArray,
+        max_iter_legacy_output: HybridArray,
+        N: int,\
+        num_monte: int,\
+        lgamma_cache: HybridArray|None=None,\
+        **kwargs) -> None:
+    local_lgamma = lgamma_cache is None
+    if local_lgamma:
+        lgamma_cache = HybridArray()
+    calc_lgamma(lgamma_cache, N, use_gpu=True)
+    max_iter_output.realloc(shape=(num_monte,N), dtype=np.uint32, use_gpu=True)
+    max_iter_legacy_output.realloc_like(max_iter_output)
+    grid_shape, block_shape = max_iter_output.gpu_grid_block2D_square_shapes(registers_per_thread=128)
+    with HybridArray().realloc(like=max_iter_output, dtype=np.float64) as noise:
+        rare_weak_null_hypothesis(sorted_p_values_output=noise, ind_model=0, **kwargs)
+        berk_jones_gpu_max_iter[grid_shape, block_shape](noise.gpu_data(), lgamma_cache.gpu_data(), max_iter_output.gpu_data()) # type: ignore
+        rare_weak_null_hypothesis(sorted_p_values_output=noise, ind_model=0, **kwargs)
+        berk_jones_legacy_gpu_max_iter[grid_shape, block_shape](noise.gpu_data(), lgamma_cache.gpu_data(), max_iter_legacy_output.gpu_data()) # type: ignore
+    if local_lgamma:
+        lgamma_cache.close()
 
 def apply_transform_discovery_method(\
         sorted_p_values_input_output: HybridArray,\
@@ -127,7 +149,7 @@ def berk_jones(\
         # GPU mode
         debug = kwargs.get('debug_berk_jones_gpu_block_size', None)
         grid_shape, block_shape =\
-            sorted_p_values_input_output.gpu_grid_block2D_square_shapes(registers_per_thread=256, debug=debug)
+            sorted_p_values_input_output.gpu_grid_block2D_columns_shapes(registers_per_thread=100, debug=debug)
         berk_jones_gpu[grid_shape, block_shape](sorted_p_values_input_output.gpu_data(), lgamma_cache.gpu_data()) # type: ignore
     else:
         # CPU mode
