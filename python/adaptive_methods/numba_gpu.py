@@ -14,8 +14,10 @@ if not globals.cpu_njit_num_threads:
     def calc_lgamma_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
 else:
+    import os
     import math
     import numpy as np
+    import cupy
     import numba
     import numba.cuda
     from numba.cuda.cudadrv.devicearray import DeviceNDArray
@@ -323,8 +325,68 @@ else:
             ret = np.float64(-1.0) # did not converge!!!
         return ret
     
-    @numba.cuda.jit(device=False)
+    def create_berk_jones_kernel(berk_jones_kernel_code_path: str = os.path.join('c','berk_jones.cu'), include_path: bool = False):
+        with open(berk_jones_kernel_code_path, 'r') as f:
+            berk_jones_kernel_code = f.read()
+        # Read the INCLUDE environment variable (Windows typically uses semicolons).
+        if include_path:
+            include_env = os.environ.get('INCLUDE', '')
+            include_paths = [os.path.normpath(p.strip()) for p in include_env.split(';') if p.strip()]
+
+            # Convert each path to a normalized OS-specific form, then build a -I argument.
+            include_options = [f'-I"{path}"' for path in include_paths]
+            print(f'Adding include paths:\n{include_options}')
+        else:
+            include_options = []
+        # Create RawModule, adding the normalized include paths to the options.
+        berk_jones_module = cupy.RawModule(
+            code=berk_jones_kernel_code,
+            name_expressions=['berk_jones_kernel'],
+            options=tuple(['--std=c++11'] + include_options)    # or c++14/17
+        )
+        # Retrieve the kernel
+        berk_jones_kernel = berk_jones_module.get_function('berk_jones_kernel')
+        return berk_jones_kernel
+
+    try:
+        print('Compiling Berk Jones for CUDA...')
+        berk_jones_kernel = create_berk_jones_kernel()
+        print('Compiling Berk Jones for CUDA... Done!')
+    except Exception as e:
+        print(f'Could not compile Berk Jones in CUDA:\n{e}')
+        berk_jones_kernel = None
+
+
+    # need HybridArray for calculating block size
     def berk_jones_gpu(\
+            sorted_p_values_input_output: HybridArray,\
+            lgamma_cache: HybridArray|None = None,\
+            **kwargs) -> None:
+        N = sorted_p_values_input_output.ncols()
+        lgamma_len = N+2 # because I want to calc from lgamma(1) to lgamma(N+1) inclusive and put them in the same indexes
+        local_lgamma = lgamma_cache is None
+        if local_lgamma:
+            lgamma_cache = HybridArray().realloc(shape=(lgamma_len,), dtype=np.float64, use_gpu=True)
+            recalc_lgamma = True
+        else:
+            recalc_lgamma = lgamma_len <= lgamma_cache.size()
+            lgamma_cache.realloc(shape=(lgamma_len,))
+        if recalc_lgamma:
+            calc_lgamma_gpu[1, 1](lgamma_cache.gpu_data()) # type: ignore
+        debug = kwargs.get('debug_berk_jones_gpu_block_size', None)
+        if berk_jones_kernel is None:
+            grid_shape, block_shape =\
+                sorted_p_values_input_output.gpu_grid_block2D_columns_shapes(registers_per_thread=100, debug=debug)
+            berk_jones_gpu_numba[grid_shape, block_shape](sorted_p_values_input_output.gpu_data(), lgamma_cache.gpu_data()) # type: ignore
+        else:
+            grid_shape, block_shape =\
+                sorted_p_values_input_output.gpu_grid_block2D_columns_shapes(registers_per_thread=64, debug=debug)
+            berk_jones_gpu_execute(grid_shape, block_shape, sorted_p_values_input_output.gpu_data(), lgamma_cache.gpu_data())
+        if local_lgamma:
+            lgamma_cache.close()
+
+    @numba.cuda.jit(device=False)
+    def berk_jones_gpu_numba(\
         sorted_p_values_input_output: DeviceNDArray,\
         lgamma_cache: DeviceNDArray) -> None:
         # Get the 2D indices of the current thread within the grid
@@ -409,3 +471,20 @@ else:
         lgamma_cache[1] = np.float64(0.0) # lgamma(1) = log(0!)
         for ind_col in range(2,N):
             lgamma_cache[ind_col] = lgamma_cache[ind_col-1] + math.log(np.float64(ind_col-1))
+
+
+
+
+    def berk_jones_gpu_execute(grid_shape: tuple, block_shape: tuple,\
+                               sorted_p_values_input_output: DeviceNDArray,\
+                               lgamma_cache: DeviceNDArray) -> None:
+        if berk_jones_kernel is None:
+            raise RuntimeError ("berk_jones_gpu_execute: berk_jones_kernel does not exists.")
+        cupy_sorted_p = cupy.asarray(sorted_p_values_input_output)
+        cupy_lgamma   = cupy.asarray(lgamma_cache)        
+        num_monte, N = sorted_p_values_input_output.shape
+        max_iter = np.uint32(150)
+        eps = np.float64(1e-20)
+        tiny = np.float64(1e-30)
+        berk_jones_kernel(grid_shape, block_shape, args=(cupy_sorted_p, cupy_lgamma, np.uint32(num_monte), np.uint32(N), max_iter, eps, tiny))
+
