@@ -39,6 +39,7 @@ def rare_weak_model(\
         mu: float|np.float64|np.float32,\
         ind_model: int|np.uint32 = 0,\
         **kwargs) -> None:
+    assert isinstance(n1,int) or np.issubdtype(n1,np.integer), f'rare_weak_model({n1=})'
     random_p_values_matrix(\
         p_values_output = sorted_p_values_output,\
         offset_row0= np.uint32(ind_model) * sorted_p_values_output.nrows(),\
@@ -106,6 +107,7 @@ def modify_p_values_submatrix(\
         n1: int|np.uint32,\
         **kwargs) -> None:
     rows, N = p_values_inoutput.shape()
+    assert isinstance(n1,int) or np.issubdtype(n1,np.integer), f'modify_p_values_submatrix({n1=})'
     assert 0 <= n1 <= N
     if n1 < 1:
         return

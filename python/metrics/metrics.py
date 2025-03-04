@@ -20,23 +20,24 @@ def analyze_auc_r_beta_ranges(\
     mus = np.sqrt(2*r_range*np.log(N))
     epsilons = np.power(N,-beta_range)
     n1s = np.clip((epsilons*N+0.5).astype(np.uint32),np.uint32(1),N)
-    n1_mus_tuples = list(itertools.product(mus,n1s))
-    ret = analyze_auc_multi_tuples_n1_mu(N=N, alpha_selection_methods=alpha_selection_methods,\
-                            n1_mus_tuples=n1_mus_tuples, **kwargs)
+    assert n1s.dtype == np.uint32
+    mu_n1_tuples = list(itertools.product(mus,n1s))
+    ret = analyze_auc_multi_tuples_mu_n1(N=N, alpha_selection_methods=alpha_selection_methods,\
+                            mu_n1_tuples=mu_n1_tuples, **kwargs)
     n1_mu_shape = (mus.size,n1s.size)
     if alpha_selection_methods is None:
         return ret.reshape(n1_mu_shape+(N,))    
     return ret.reshape((ret.shape[0],)+n1_mu_shape).squeeze()
 
 
-def analyze_auc_multi_tuples_n1_mu(\
+def analyze_auc_multi_tuples_mu_n1(\
         N: int,\
-        n1_mu_tuples: tuple|list[tuple],\
+        mu_n1_tuples: tuple[float,int|np.uint32]|list[tuple[float,int|np.uint32]],\
         alpha_selection_methods: list|str|float|None=None,\
         **kwargs) -> np.ndarray:
-    if not isinstance(n1_mu_tuples, list):
-        n1_mu_tuples = [n1_mu_tuples]
-    num_executions = len(n1_mu_tuples)
+    if not isinstance(mu_n1_tuples, list):
+        mu_n1_tuples = [mu_n1_tuples]
+    num_executions = len(mu_n1_tuples)
     use_gpu = kwargs.get('use_gpu', None)
     auc_results = HybridArray().realloc(shape=(num_executions,N), dtype=np.float64, use_gpu=use_gpu)
     with (HybridArray() as noise,\
@@ -45,7 +46,8 @@ def analyze_auc_multi_tuples_n1_mu(\
         pbar.set_postfix({"Current Step": 0})  # Set dynamic message
         create_noise_4_auc(noise=noise, N=N, ind_model=num_executions, **kwargs)
         pbar.update(1)
-        for ind_model,(n1,mu) in enumerate(n1_mu_tuples):
+        for ind_model,(mu,n1) in enumerate(mu_n1_tuples):
+            assert isinstance(n1,int) or np.issubdtype(n1,np.integer), f'analyze_auc_multi_tuples_n1_mu{mu_n1_tuples[0]=} {type(n1)=}'
             pbar.set_postfix({"Current Step": ind_model+1})  # Set dynamic message
             create_signal_4_auc(\
                 signal=signal, N=N,\
@@ -154,6 +156,7 @@ def create_signal_4_auc(signal: HybridArray,\
                         n1: np.uint32|int,\
                         mu: np.float64|np.float32|float,\
                         **kwargs) -> None:
+    assert isinstance(n1,int) or np.issubdtype(n1,np.integer), f'create_signal_4_auc({n1=})'
     use_gpu = kwargs.get('use_gpu', None)
     signal.realloc(shape=(num_monte,N), dtype=np.float64, use_gpu=use_gpu)
     rare_weak_model(sorted_p_values_output=signal,\

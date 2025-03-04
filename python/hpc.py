@@ -387,6 +387,11 @@ class HybridArray:
         return self
     
     def crop(self, row0: int|np.uint32, row1: int|np.uint32, col0: int|np.uint32, col1: int|np.uint32) -> 'HybridArray':
+        assert self.ndim() == 2
+        assert isinstance(row0,int) or np.issubdtype(row0,np.integer), f'HybridArray.crop({row0=})'
+        assert isinstance(row1,int) or np.issubdtype(row1,np.integer), f'HybridArray.crop({row1=})'
+        assert isinstance(col0,int) or np.issubdtype(col0,np.integer), f'HybridArray.crop({col0=})'
+        assert isinstance(col1,int) or np.issubdtype(col1,np.integer), f'HybridArray.crop({col1=})'
         if self.original_numpy_data is not None:
             self.data = self.original_numpy_data[row0:row1,col0:col1]
         elif self.original_numba_data is not None:
