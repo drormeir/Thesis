@@ -7,41 +7,36 @@ from python.metrics.numba_cpu import detect_signal_auc_cpu_njit
 from python.metrics.python_native import detect_signal_auc_py
 from python.rare_weak_model.rare_weak_model import rare_weak_null_hypothesis, rare_weak_model
 from python.adaptive_methods.adaptive_methods import apply_transform_discovery_method
-from python.array_math_utils.array_math_utils import array_transpose_inplace, sort_rows_inplace, max_along_rows, array_transpose
+from python.array_math_utils.array_math_utils import array_transpose_inplace, sort_rows_inplace, max_column_along_rows, array_transpose
 
 def analyze_auc_r_beta_ranges(\
         N: int,\
         r_range: np.ndarray|list,\
         beta_range: np.ndarray|list,\
-        alpha_selection_method: str|float,\
+        alpha_selection_methods: list|str|float|None,\
         **kwargs) -> np.ndarray:
     r_range = np.asarray(r_range).reshape(-1)
     beta_range = np.asarray(beta_range).reshape(-1)
-    out_shape = (r_range.size,beta_range.size)
     mus = np.sqrt(2*r_range*np.log(N))
     epsilons = np.power(N,-beta_range)
     n1s = np.clip((epsilons*N+0.5).astype(np.uint32),np.uint32(1),N)
-    mus, n1s = zip(*itertools.product(mus,n1s))
-    ret = analyze_multi_auc(N=N, alpha_selection_method=alpha_selection_method,\
-                            n1s=n1s, mus=mus, **kwargs)
-    if isinstance(alpha_selection_method, str):
-        ret = ret.reshape((2,)+out_shape)
-    else:
-        ret = ret.reshape(out_shape)
-    return ret
+    n1_mus_tuples = list(itertools.product(mus,n1s))
+    ret = analyze_auc_multi_tuples_n1_mu(N=N, alpha_selection_methods=alpha_selection_methods,\
+                            n1_mus_tuples=n1_mus_tuples, **kwargs)
+    n1_mu_shape = (mus.size,n1s.size)
+    if alpha_selection_methods is None:
+        return ret.reshape(n1_mu_shape+(N,))    
+    return ret.reshape((ret.shape[0],)+n1_mu_shape).squeeze()
 
-def analyze_multi_auc(\
+
+def analyze_auc_multi_tuples_n1_mu(\
         N: int,\
-        n1s: tuple|list|np.ndarray, mus: tuple|list|np.ndarray,\
-        alpha_selection_method: str|float|None=None,\
+        n1_mu_tuples: tuple|list[tuple],\
+        alpha_selection_methods: list|str|float|None=None,\
         **kwargs) -> np.ndarray:
-    if isinstance(n1s, np.ndarray):
-        n1s = n1s.reshape(-1).tolist()
-    if isinstance(mus, np.ndarray):
-        mus = mus.reshape(-1).tolist()
-    assert n1s and mus
-    assert len(n1s) == len(mus)
-    num_executions = len(n1s)
+    if not isinstance(n1_mu_tuples, list):
+        n1_mu_tuples = [n1_mu_tuples]
+    num_executions = len(n1_mu_tuples)
     use_gpu = kwargs.get('use_gpu', None)
     auc_results = HybridArray().realloc(shape=(num_executions,N), dtype=np.float64, use_gpu=use_gpu)
     with (HybridArray() as noise,\
@@ -50,7 +45,7 @@ def analyze_multi_auc(\
         pbar.set_postfix({"Current Step": 0})  # Set dynamic message
         create_noise_4_auc(noise=noise, N=N, ind_model=num_executions, **kwargs)
         pbar.update(1)
-        for ind_model,n1,mu in zip(range(num_executions), n1s, mus):
+        for ind_model,(n1,mu) in enumerate(n1_mu_tuples):
             pbar.set_postfix({"Current Step": ind_model+1})  # Set dynamic message
             create_signal_4_auc(\
                 signal=signal, N=N,\
@@ -61,20 +56,49 @@ def analyze_multi_auc(\
                                 **kwargs)
             pbar.update(1)
     auc_results.uncrop()
-    if alpha_selection_method is None:
-        ret = auc_results.numpy()
-    elif isinstance(auc_results,str) and auc_results == 'max':
-        with (HybridArray() as argmax, HybridArray() as maxval):
-            max_along_rows(auc_results,argmax=argmax,maxval=maxval)
-            argmax_result = ((argmax.numpy()+1)/N).astype(np.float64)
-            maxval_result = maxval.numpy()
-            ret = np.hstack([argmax_result, maxval_result])
-    elif isinstance(alpha_selection_method, (float, np.floating)):
-        ind_col = min(np.uint32(N*max(alpha_selection_method,0.0) + 0.5),np.uint32(N-1))
-        ret = auc_results.select_col(ind_col).numpy()
+    if alpha_selection_methods is None:
+        assert auc_results.shape() == (num_executions,N)
+        return auc_results.numpy()
+    if not isinstance(alpha_selection_methods,list):
+        alpha_selection_methods = [alpha_selection_methods]
+    ret_list: list = []
+    save_max_label = ''
+    save_max_values = None
+    for alpha_method in alpha_selection_methods:
+        if isinstance(alpha_method,str):
+            if alpha_method == save_max_label:
+                ret_list.append(save_max_values)
+                continue
+            if alpha_method in ['max', 'argmax']: 
+                with (HybridArray() as argmax, HybridArray() as maxval):
+                    max_column_along_rows(auc_results,argmax=argmax,maxval=maxval)
+                    maxval_numpy = maxval.numpy()
+                    argmax_numpy = ((argmax.numpy()+1)/N).astype(np.float64)
+                    if alpha_method == 'max':
+                        ret_list.append(maxval_numpy)
+                        save_max_label = 'argmax'
+                        save_max_values = argmax_numpy
+                    else:
+                        ret_list.append(argmax_numpy)
+                        save_max_label = 'max'
+                        save_max_values = maxval_numpy
+            elif alpha_method == 'first':
+                ret_list.append(auc_results.select_col(0).numpy())
+                auc_results.uncrop()
+            else:
+                assert False, f'{alpha_selection_methods=}'
+        elif isinstance(alpha_method, (float, np.floating)):
+            ind_col = min(np.uint32(N*max(alpha_method,0.0) + 0.5),np.uint32(N-1))
+            ret_list.append(auc_results.select_col(ind_col).numpy())
+            auc_results.uncrop()
+        else:
+            assert False, f'{alpha_selection_methods=}'
+    if len(ret_list) == 1:
+        ret_numpy = ret_list[0]
     else:
-        assert False, f'{alpha_selection_method=}'
-    return ret
+        ret_numpy = np.hstack(ret_list)
+    return ret_numpy.T
+
 
 def test_speed_neto_detect_signal_auc(\
         N: int,\

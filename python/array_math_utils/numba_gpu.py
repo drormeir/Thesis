@@ -19,7 +19,7 @@ if not globals.cuda_available:
         raise_cuda_not_available()
     def cumulative_dominant_min_inplace_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def max_along_rows_gpu(**kwargs) -> None: # type: ignore
+    def max_column_along_rows_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
 else:
     import numpy as np
@@ -44,7 +44,7 @@ else:
     def sort_rows_inplace_gpu(array: DeviceNDArray) -> None:
         cupy.asarray(array).sort(axis=1)
 
-    def max_along_rows_gpu(array: DeviceNDArray, argmax: DeviceNDArray, maxval: DeviceNDArray) -> None:
+    def max_column_along_rows_gpu(array: DeviceNDArray, argmax: DeviceNDArray, maxval: DeviceNDArray) -> None:
         array_cupy = cupy.asarray(array)
         maxval_cupy = cupy.asarray(maxval).reshape(-1)
         argmax_cupy = cupy.asarray(argmax).reshape(-1)

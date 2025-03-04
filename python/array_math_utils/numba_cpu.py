@@ -18,7 +18,7 @@ if not cpu_njit_num_threads:
         raise_njit_not_available()
     def cumulative_dominant_min_inplace_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def max_along_rows_cpu_njit(**kwargs) -> None: # type: ignore
+    def max_column_along_rows_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
 else:
     import numpy as np
@@ -120,7 +120,7 @@ else:
                 row[j] = current_dominant
 
     @numba.njit(parallel=True)
-    def max_along_rows_cpu_njit(array: np.ndarray, argmax: np.ndarray, maxval: np.ndarray) -> None:
+    def max_column_along_rows_cpu_njit(array: np.ndarray, argmax: np.ndarray, maxval: np.ndarray) -> None:
         rows = array.shape[0]
         chunks_ranges = split2chunks(rows)
         for ind_chunck in numba.prange(chunks_ranges.shape[0]):

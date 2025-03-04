@@ -1,7 +1,7 @@
 import numpy as np
 from python.hpc import use_njit, HybridArray
-from python.array_math_utils.numba_gpu import array_transpose_gpu, sort_rows_inplace_gpu, average_row_gpu, average_column_gpu, cumulative_argmin_gpu, cumulative_min_inplace_gpu, cumulative_dominant_argmin_gpu, cumulative_dominant_min_inplace_gpu, max_along_rows_gpu
-from python.array_math_utils.numba_cpu import array_transpose_cpu_njit, average_row_cpu_njit, average_column_cpu_njit, sort_rows_inplace_cpu_njit, cumulative_argmin_cpu_njit, cumulative_min_inplace_cpu_njit, cumulative_dominant_argmin_cpu_njit, cumulative_dominant_min_inplace_cpu_njit, max_along_rows_cpu_njit
+from python.array_math_utils.numba_gpu import array_transpose_gpu, sort_rows_inplace_gpu, average_row_gpu, average_column_gpu, cumulative_argmin_gpu, cumulative_min_inplace_gpu, cumulative_dominant_argmin_gpu, cumulative_dominant_min_inplace_gpu, max_column_along_rows_gpu
+from python.array_math_utils.numba_cpu import array_transpose_cpu_njit, average_row_cpu_njit, average_column_cpu_njit, sort_rows_inplace_cpu_njit, cumulative_argmin_cpu_njit, cumulative_min_inplace_cpu_njit, cumulative_dominant_argmin_cpu_njit, cumulative_dominant_min_inplace_cpu_njit, max_column_along_rows_cpu_njit
 from python.array_math_utils.python_native import cumulative_argmin_py, cumulative_min_inplace_py, cumulative_dominant_argmin_py, cumulative_dominant_min_inplace_py
 
 def array_transpose_inplace(array: HybridArray, **kwargs) -> None:
@@ -118,21 +118,21 @@ def cumulative_dominant_min_inplace(array: HybridArray, **kwargs) -> None:
         else:
             cumulative_dominant_min_inplace_py(array=array.numpy())
 
-def max_along_rows(array: HybridArray, argmax: HybridArray, maxval: HybridArray, **kwargs) -> None:
+def max_column_along_rows(array: HybridArray, argmax: HybridArray, maxval: HybridArray, **kwargs) -> None:
     assert array.dtype() == np.float64, f'{array.dtype()=}'
     shape = (1,array.nrows())
     argmax.realloc(like=array, shape=shape, dtype=np.uint32)
     maxval.realloc(like=array, shape=shape)
     if array.is_gpu():
         # GPU mode
-        max_along_rows_gpu(array=array.gpu_data(), argmax=argmax.gpu_data(), maxval=maxval.gpu_data())
+        max_column_along_rows_gpu(array=array.gpu_data(), argmax=argmax.gpu_data(), maxval=maxval.gpu_data())
     else:
         # CPU mode
         array_numpy = array.numpy()
         argmax_numpy = argmax.numpy().reshape(-1)
         maxval_numpy = maxval.numpy().reshape(-1)
         if use_njit(**kwargs):
-            max_along_rows_cpu_njit(array=array_numpy, argmax=argmax_numpy, maxval=maxval_numpy)
+            max_column_along_rows_cpu_njit(array=array_numpy, argmax=argmax_numpy, maxval=maxval_numpy)
         else:
             array_numpy.argmax(axis=1, out=argmax_numpy)
             array_numpy.max(axis=1, out=maxval_numpy)
