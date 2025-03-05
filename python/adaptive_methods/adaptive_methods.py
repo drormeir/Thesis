@@ -80,18 +80,23 @@ def berk_jones_max_iter(\
 def apply_transform_discovery_method(\
         sorted_p_values_input_output: HybridArray,\
         num_discoveries_output: HybridArray|None,\
+        transform_method: str,\
+        discovery_method: str = '',\
         **kwargs) -> None:
     apply_transform_method(\
         sorted_p_values_input_output=sorted_p_values_input_output,\
+        transform_method=transform_method,\
         **kwargs)
     if num_discoveries_output is None:
         apply_discovery_method_on_transformation(\
             transformed_p_values_input=sorted_p_values_input_output,\
+            discovery_method=discovery_method,\
             **kwargs)
     else:
         discover_by_method(\
             transformed_p_values_input=sorted_p_values_input_output,\
             num_discoveries_output=num_discoveries_output,\
+            discovery_method=discovery_method,\
             **kwargs)
         
 
@@ -179,25 +184,28 @@ def calc_lgamma(lgamma_cache: HybridArray, N: int|np.uint32, use_gpu: bool, **kw
 
 def apply_discovery_method_on_transformation(\
         transformed_p_values_input: HybridArray,\
-        discovery_method: str = 'argmin',\
+        discovery_method: str = '',\
         **kwargs) -> None:
-    if discovery_method == 'argmin':
+    if discovery_method == '':
         cumulative_min_inplace(array=transformed_p_values_input, **kwargs)
-    else:
+    elif discovery_method == 'dominant':
         cumulative_dominant_min_inplace(array=transformed_p_values_input, **kwargs)
-
+    else:
+        assert False, f'apply_discovery_method_on_transformation({discovery_method=})'
 
 def discover_by_method(\
         transformed_p_values_input: HybridArray,\
         num_discoveries_output: HybridArray,\
-        discovery_method: str,\
+        discovery_method: str = '',\
         **kwargs) -> None:
-    if discovery_method == 'argmin':
+    if discovery_method == '':
         cumulative_argmin(array=transformed_p_values_input,\
                         argmin=num_discoveries_output,\
                         **kwargs)
-    else:
+    elif discovery_method == 'dominant':
         cumulative_dominant_argmin(array=transformed_p_values_input,\
                         argmin=num_discoveries_output,\
                         **kwargs)
+    else:
+        assert False, f'discover_by_method({discovery_method=})'
 

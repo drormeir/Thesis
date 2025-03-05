@@ -33,6 +33,7 @@ def analyze_auc_r_beta_ranges(\
 def analyze_auc_multi_tuples_mu_n1(\
         N: int,\
         mu_n1_tuples: tuple[float,int|np.uint32]|list[tuple[float,int|np.uint32]],\
+        transform_method: str,\
         alpha_selection_methods: list|str|float|None=None,\
         **kwargs) -> np.ndarray:
     if not isinstance(mu_n1_tuples, list):
@@ -42,9 +43,9 @@ def analyze_auc_multi_tuples_mu_n1(\
     auc_results = HybridArray().realloc(shape=(num_executions,N), dtype=np.float64, use_gpu=use_gpu)
     with (HybridArray() as noise,\
             HybridArray() as signal,\
-            tqdm(total=num_executions+1, desc="Processing", unit="step") as pbar):
+            tqdm(total=num_executions+1, desc=f'Processing {transform_method}', unit='step') as pbar):
         pbar.set_postfix({"Current Step": 0})  # Set dynamic message
-        create_noise_4_auc(noise=noise, N=N, ind_model=num_executions, **kwargs)
+        create_noise_4_auc(noise=noise, N=N, ind_model=num_executions, transform_method=transform_method, **kwargs)
         pbar.update(1)
         for ind_model,(mu,n1) in enumerate(mu_n1_tuples):
             assert isinstance(n1,int) or np.issubdtype(n1,np.integer), f'analyze_auc_multi_tuples_n1_mu{mu_n1_tuples[0]=} {type(n1)=}'
@@ -52,6 +53,7 @@ def analyze_auc_multi_tuples_mu_n1(\
             create_signal_4_auc(\
                 signal=signal, N=N,\
                 ind_model=ind_model, n1=n1, mu=mu,\
+                transform_method=transform_method,\
                 **kwargs)
             detect_signal_auc(noise_input=noise, signal_input_work=signal,\
                             auc_out_row=auc_results.select_row(ind_model),\
@@ -136,6 +138,7 @@ def test_speed_neto_detect_signal_auc(\
 
 def create_noise_4_auc(noise: HybridArray,\
                        num_monte: int, N: int,\
+                       transform_method: str,\
                        ind_model: int=0,
                        **kwargs) -> None:
     use_gpu = kwargs.get('use_gpu', None)
@@ -145,13 +148,15 @@ def create_noise_4_auc(noise: HybridArray,\
     apply_transform_discovery_method(
         sorted_p_values_input_output=noise,
         num_discoveries_output=None,\
+        transform_method=transform_method,\
         **kwargs)
     array_transpose_inplace(noise, **kwargs)
     sort_rows_inplace(noise, **kwargs)
 
 
 def create_signal_4_auc(signal: HybridArray,\
-                       num_monte: int, N: int,\
+                        num_monte: int, N: int,\
+                        transform_method: str,\
                         ind_model: int,\
                         n1: np.uint32|int,\
                         mu: np.float64|np.float32|float,\
@@ -166,6 +171,7 @@ def create_signal_4_auc(signal: HybridArray,\
     apply_transform_discovery_method(\
         sorted_p_values_input_output=signal,\
         num_discoveries_output=None,\
+        transform_method=transform_method,\
         **kwargs)
 
 
