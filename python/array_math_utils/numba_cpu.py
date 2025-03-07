@@ -12,7 +12,11 @@ if not cpu_njit_num_threads:
         raise_njit_not_available()
     def cumulative_argmin_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
+    def cumulative_argmax_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
     def cumulative_min_inplace_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def cumulative_max_inplace_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
     def cumulative_dominant_argmin_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
@@ -66,6 +70,23 @@ else:
                     current_min = curr_val
                 output_row[j] = current_idx
 
+
+    @numba.njit(parallel=True)
+    def cumulative_argmax_cpu_njit(array: np.ndarray, argmax: np.ndarray) -> None:
+        rows, cols = array.shape
+        for ind_row in numba.prange(rows):
+            input_row = array[ind_row]
+            output_row = argmax[ind_row]
+            current_max = input_row[0]
+            current_idx = np.uint32(0)
+            output_row[0] = np.uint32(0)
+            for j in range(1, cols):
+                curr_val = input_row[j]
+                if curr_val > current_max:
+                    current_idx = np.uint32(j)
+                    current_max = curr_val
+                output_row[j] = current_idx
+
     @numba.njit(parallel=True)
     def cumulative_min_inplace_cpu_njit(array: np.ndarray) -> None:
         rows, cols = array.shape
@@ -77,6 +98,18 @@ else:
                 if curr_val < current_min:
                     current_min = curr_val
                 row[j] = current_min
+
+    @numba.njit(parallel=True)
+    def cumulative_max_inplace_cpu_njit(array: np.ndarray) -> None:
+        rows, cols = array.shape
+        for ind_row in numba.prange(rows):
+            row = array[ind_row]
+            current_max = row[0]
+            for j in range(1, cols):
+                curr_val = row[j]
+                if curr_val > current_max:
+                    current_max = curr_val
+                row[j] = current_max
 
     @numba.njit(parallel=True)
     def cumulative_dominant_argmin_cpu_njit(array: np.ndarray, argmin: np.ndarray) -> None:

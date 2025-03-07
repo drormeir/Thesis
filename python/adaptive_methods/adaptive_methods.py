@@ -4,7 +4,7 @@ from python.hpc import use_njit, HybridArray
 from python.adaptive_methods.numba_gpu import higher_criticism_gpu, higher_criticism_unstable_gpu, berk_jones_gpu, calc_lgamma_gpu, berk_jones_gpu_max_iter, berk_jones_legacy_gpu_max_iter, berk_jones_gpu_execute
 from python.adaptive_methods.numba_cpu import higher_criticism_cpu_njit, higher_criticism_unstable_cpu_njit, berk_jones_cpu_njit, calc_lgamma_cpu_njit
 from python.adaptive_methods.python_native import higher_criticism_py, higher_criticism_unstable_py, berk_jones_py, calc_lgamma_py
-from python.array_math_utils.array_math_utils import cumulative_argmin, cumulative_min_inplace, cumulative_dominant_argmin, cumulative_dominant_min_inplace
+from python.array_math_utils.array_math_utils import cumulative_argmin, cumulative_argmax, cumulative_min_inplace, cumulative_max_inplace, cumulative_dominant_argmin, cumulative_dominant_min_inplace
 from python.rare_weak_model.rare_weak_model import rare_weak_null_hypothesis
 
 
@@ -81,12 +81,17 @@ def apply_transform_discovery_method(\
         sorted_p_values_input_output: HybridArray,\
         num_discoveries_output: HybridArray|None,\
         transform_method: str,\
-        discovery_method: str = '',\
+        discovery_method: str|None = None,\
         **kwargs) -> None:
     apply_transform_method(\
         sorted_p_values_input_output=sorted_p_values_input_output,\
         transform_method=transform_method,\
         **kwargs)
+    if discovery_method is None:
+        if transform_method == 'topk':
+            discovery_method = 'max'
+        else:
+            discovery_method = 'min'
     if num_discoveries_output is None:
         apply_discovery_method_on_transformation(\
             transformed_p_values_input=sorted_p_values_input_output,\
@@ -110,7 +115,7 @@ def apply_transform_method(\
         higher_criticism_unstable(sorted_p_values_input_output,**kwargs)
     elif transform_method == 'berk_jones':
         berk_jones(sorted_p_values_input_output,**kwargs)
-    elif transform_method == 'identity':
+    elif transform_method == 'topk':
         return
     else:
         assert False, f'{transform_method=}'
@@ -184,11 +189,13 @@ def calc_lgamma(lgamma_cache: HybridArray, N: int|np.uint32, use_gpu: bool, **kw
 
 def apply_discovery_method_on_transformation(\
         transformed_p_values_input: HybridArray,\
-        discovery_method: str = '',\
+        discovery_method: str,\
         **kwargs) -> None:
-    if discovery_method == '':
+    if discovery_method == 'min':
         cumulative_min_inplace(array=transformed_p_values_input, **kwargs)
-    elif discovery_method == 'dominant':
+    elif discovery_method == 'max':
+        cumulative_max_inplace(array=transformed_p_values_input, **kwargs)
+    elif discovery_method == 'dominant_min':
         cumulative_dominant_min_inplace(array=transformed_p_values_input, **kwargs)
     else:
         assert False, f'apply_discovery_method_on_transformation({discovery_method=})'
@@ -196,10 +203,14 @@ def apply_discovery_method_on_transformation(\
 def discover_by_method(\
         transformed_p_values_input: HybridArray,\
         num_discoveries_output: HybridArray,\
-        discovery_method: str = '',\
+        discovery_method: str,\
         **kwargs) -> None:
-    if discovery_method == '':
+    if discovery_method == 'min':
         cumulative_argmin(array=transformed_p_values_input,\
+                        argmin=num_discoveries_output,\
+                        **kwargs)
+    elif discovery_method == 'max':
+        cumulative_argmax(array=transformed_p_values_input,\
                         argmin=num_discoveries_output,\
                         **kwargs)
     elif discovery_method == 'dominant':

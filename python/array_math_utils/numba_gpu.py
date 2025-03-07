@@ -13,7 +13,11 @@ if not globals.cuda_available:
         raise_cuda_not_available()
     def cumulative_argmin_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
+    def cumulative_argmax_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
     def cumulative_min_inplace_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
+    def cumulative_max_inplace_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
     def cumulative_dominant_argmin_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
@@ -73,6 +77,27 @@ else:
 
 
     @numba.cuda.jit(device=False)
+    def cumulative_argmax_gpu(array: DeviceNDArray, argmax: DeviceNDArray) -> None:
+        # Get the 1D indices of the current thread within the grid
+        ind_row0 = numba.cuda.grid(1) # type: ignore
+        # Calculate the strides
+        row_stride = numba.cuda.gridsize(1) # type: ignore
+        rows, cols = array.shape
+        for ind_row in range(ind_row0, rows, row_stride):
+            input_row = array[ind_row]
+            output_row = argmax[ind_row]
+            current_max = input_row[0]
+            current_idx = np.uint32(0)
+            output_row[0] = np.uint32(0)
+            for j in range(1, cols):
+                curr_val = input_row[j]
+                if curr_val > current_max:
+                    current_idx = np.uint32(j)
+                    current_max = curr_val
+                output_row[j] = current_idx
+
+
+    @numba.cuda.jit(device=False)
     def cumulative_min_inplace_gpu(array: DeviceNDArray) -> None:
         # Get the 1D indices of the current thread within the grid
         ind_row0 = numba.cuda.grid(1) # type: ignore
@@ -87,6 +112,23 @@ else:
                 if curr_val < current_min:
                     current_min = curr_val
                 row[j] = current_min
+
+
+    @numba.cuda.jit(device=False)
+    def cumulative_max_inplace_gpu(array: DeviceNDArray) -> None:
+        # Get the 1D indices of the current thread within the grid
+        ind_row0 = numba.cuda.grid(1) # type: ignore
+        # Calculate the strides
+        row_stride = numba.cuda.gridsize(1) # type: ignore
+        rows, cols = array.shape
+        for ind_row in range(ind_row0, rows, row_stride):
+            row = array[ind_row]
+            current_max = row[0]
+            for j in range(1, cols):
+                curr_val = row[j]
+                if curr_val < current_max:
+                    current_max = curr_val
+                row[j] = current_max
 
 
     @numba.cuda.jit(device=False)

@@ -1,8 +1,8 @@
 import numpy as np
 from python.hpc import use_njit, HybridArray
-from python.array_math_utils.numba_gpu import array_transpose_gpu, sort_rows_inplace_gpu, average_row_gpu, average_column_gpu, cumulative_argmin_gpu, cumulative_min_inplace_gpu, cumulative_dominant_argmin_gpu, cumulative_dominant_min_inplace_gpu, max_column_along_rows_gpu
-from python.array_math_utils.numba_cpu import array_transpose_cpu_njit, average_row_cpu_njit, average_column_cpu_njit, sort_rows_inplace_cpu_njit, cumulative_argmin_cpu_njit, cumulative_min_inplace_cpu_njit, cumulative_dominant_argmin_cpu_njit, cumulative_dominant_min_inplace_cpu_njit, max_column_along_rows_cpu_njit
-from python.array_math_utils.python_native import cumulative_argmin_py, cumulative_min_inplace_py, cumulative_dominant_argmin_py, cumulative_dominant_min_inplace_py
+from python.array_math_utils.numba_gpu import array_transpose_gpu, sort_rows_inplace_gpu, average_row_gpu, average_column_gpu, cumulative_argmin_gpu, cumulative_argmax_gpu, cumulative_min_inplace_gpu, cumulative_max_inplace_gpu, cumulative_dominant_argmin_gpu, cumulative_dominant_min_inplace_gpu, max_column_along_rows_gpu
+from python.array_math_utils.numba_cpu import array_transpose_cpu_njit, average_row_cpu_njit, average_column_cpu_njit, sort_rows_inplace_cpu_njit, cumulative_argmin_cpu_njit, cumulative_argmax_cpu_njit, cumulative_min_inplace_cpu_njit, cumulative_max_inplace_cpu_njit, cumulative_dominant_argmin_cpu_njit, cumulative_dominant_min_inplace_cpu_njit, max_column_along_rows_cpu_njit
+from python.array_math_utils.python_native import cumulative_argmin_py, cumulative_argmax_py, cumulative_min_inplace_py, cumulative_max_inplace_py, cumulative_dominant_argmin_py, cumulative_dominant_min_inplace_py
 
 def array_transpose_inplace(array: HybridArray, **kwargs) -> None:
     work = HybridArray()
@@ -62,6 +62,7 @@ def sort_rows_inplace(array: HybridArray, **kwargs) -> None:
         else:
             array.numpy().sort(axis=1)
 
+
 def cumulative_argmin(array: HybridArray, argmin: HybridArray, **kwargs) -> None:
     assert array.dtype() == np.float64, f'{array.dtype()=}'
     argmin.realloc(like=array, dtype=np.uint32)
@@ -77,6 +78,21 @@ def cumulative_argmin(array: HybridArray, argmin: HybridArray, **kwargs) -> None
             cumulative_argmin_py(array=array.numpy(), argmin=argmin.numpy())
 
 
+def cumulative_argmax(array: HybridArray, argmax: HybridArray, **kwargs) -> None:
+    assert array.dtype() == np.float64, f'{array.dtype()=}'
+    argmax.realloc(like=array, dtype=np.uint32)
+    if array.is_gpu():
+        # GPU mode
+        grid_shape, block_shape = array.gpu_grid_block1D_rows_shapes()
+        cumulative_argmax_gpu[grid_shape, block_shape](array.gpu_data(), argmax.gpu_data()) # type: ignore
+    else:
+        # CPU mode
+        if use_njit(**kwargs):
+            cumulative_argmax_cpu_njit(array=array.numpy(), argmax=argmax.numpy())
+        else:
+            cumulative_argmax_py(array=array.numpy(), argmax=argmax.numpy())
+
+
 def cumulative_min_inplace(array: HybridArray, **kwargs) -> None:
     assert array.dtype() == np.float64, f'{array.dtype()=}'
     if array.is_gpu():
@@ -89,6 +105,21 @@ def cumulative_min_inplace(array: HybridArray, **kwargs) -> None:
             cumulative_min_inplace_cpu_njit(array=array.numpy())
         else:
             cumulative_min_inplace_py(array=array.numpy())
+
+
+def cumulative_max_inplace(array: HybridArray, **kwargs) -> None:
+    assert array.dtype() == np.float64, f'{array.dtype()=}'
+    if array.is_gpu():
+        # GPU mode
+        grid_shape, block_shape = array.gpu_grid_block1D_rows_shapes()
+        cumulative_max_inplace_gpu[grid_shape, block_shape](array.gpu_data()) # type: ignore
+    else:
+        # CPU mode
+        if use_njit(**kwargs):
+            cumulative_max_inplace_cpu_njit(array=array.numpy())
+        else:
+            cumulative_max_inplace_py(array=array.numpy())
+
 
 def cumulative_dominant_argmin(array: HybridArray, argmin: HybridArray, **kwargs) -> None:
     assert array.dtype() == np.float64, f'{array.dtype()=}'    
