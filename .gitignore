@@ -396,3 +396,6 @@ FodyWeavers.xsd
 
 # Adobe Acrobat Read
 desktop.ini
+
+# Google doc
+*.gdoc
