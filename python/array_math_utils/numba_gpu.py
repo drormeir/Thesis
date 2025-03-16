@@ -55,6 +55,13 @@ else:
         cupy.max(array_cupy, axis=1, out=maxval_cupy)
         cupy.argmax(array_cupy, axis=1, out=argmax_cupy, dtype=np.uint32)
 
+    def min_column_along_rows_gpu(array: DeviceNDArray, argmin: DeviceNDArray, minval: DeviceNDArray) -> None:
+        array_cupy = cupy.asarray(array)
+        minval_cupy = cupy.asarray(minval).reshape(-1)
+        argmin_cupy = cupy.asarray(argmin).reshape(-1)
+        cupy.min(array_cupy, axis=1, out=minval_cupy)
+        cupy.argmin(array_cupy, axis=1, out=argmin_cupy, dtype=np.uint32)
+
     @numba.cuda.jit(device=False)
     def cumulative_argmin_gpu(array: DeviceNDArray, argmin: DeviceNDArray) -> None:
         # Get the 1D indices of the current thread within the grid
