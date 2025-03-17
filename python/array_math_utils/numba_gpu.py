@@ -21,7 +21,11 @@ if not globals.cuda_available:
         raise_cuda_not_available()
     def cumulative_dominant_argmin_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
+    def cumulative_dominant_argmax_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
     def cumulative_dominant_min_inplace_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
+    def cumulative_dominant_max_inplace_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
     def max_column_along_rows_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
@@ -166,6 +170,33 @@ else:
 
 
     @numba.cuda.jit(device=False)
+    def cumulative_dominant_argmax_gpu(array: DeviceNDArray, argmax: DeviceNDArray) -> None:
+        # Get the 1D indices of the current thread within the grid
+        ind_row0 = numba.cuda.grid(1) # type: ignore
+        # Calculate the strides
+        row_stride = numba.cuda.gridsize(1) # type: ignore
+        rows, cols = array.shape
+        for ind_row in range(ind_row0, rows, row_stride):
+            input_row = array[ind_row]
+            output_row = argmax[ind_row]
+            current_max = input_row[0]
+            current_ind_max = np.uint32(0)
+            current_ind_dominant = np.uint32(0)
+            max_dominant_length = np.uint32(0)
+            output_row[0] = np.uint32(0)
+            for j in range(1, cols):
+                curr_val = input_row[j]
+                if curr_val > current_max:
+                    curr_val = current_max
+                    current_ind_max = np.uint32(j)
+                curr_dominant_length = np.uint32(j) - current_ind_max
+                if curr_dominant_length >= max_dominant_length:
+                    current_ind_dominant = current_ind_max
+                    max_dominant_length = curr_dominant_length
+                output_row[j] = current_ind_dominant
+
+
+    @numba.cuda.jit(device=False)
     def cumulative_dominant_min_inplace_gpu(array: DeviceNDArray) -> None:
         # Get the 1D indices of the current thread within the grid
         ind_row0 = numba.cuda.grid(1) # type: ignore
@@ -185,6 +216,30 @@ else:
                 curr_dominant_length = np.uint32(j) - current_ind_min
                 if curr_dominant_length >= max_dominant_length:
                     current_dominant = current_min
+                    max_dominant_length = curr_dominant_length
+                row[j] = current_dominant
+
+
+    @numba.cuda.jit(device=False)
+    def cumulative_dominant_max_inplace_gpu(array: DeviceNDArray) -> None:
+        # Get the 1D indices of the current thread within the grid
+        ind_row0 = numba.cuda.grid(1) # type: ignore
+        # Calculate the strides
+        row_stride = numba.cuda.gridsize(1) # type: ignore
+        num_monte, N = array.shape
+        for ind_row in range(ind_row0, num_monte, row_stride):
+            row = array[ind_row]
+            current_ind_max = np.uint32(0)
+            current_max = current_dominant = row[0]
+            max_dominant_length = np.uint32(0)
+            for j in range(1, N):
+                curr_val = row[j]
+                if curr_val > current_max:
+                    current_ind_max = np.uint32(j)
+                    current_max = curr_val
+                curr_dominant_length = np.uint32(j) - current_ind_max
+                if curr_dominant_length >= max_dominant_length:
+                    current_dominant = current_max
                     max_dominant_length = curr_dominant_length
                 row[j] = current_dominant
 
