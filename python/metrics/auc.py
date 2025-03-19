@@ -11,8 +11,12 @@ from python.metrics.r_beta_space import R_Beta_Space
 
 
 class AUC_analysis(R_Beta_Space):
-    def __init__(self, **kwargs) -> None:
-        super(AUC_analysis, self).__init__(**kwargs)
+    def __init__(self, N: int,\
+                 num_monte: int,\
+                 r_range: np.ndarray|list,\
+                 beta_range: np.ndarray|list,\
+                 **kwargs) -> None:
+        super(AUC_analysis, self).__init__(N=N, num_monte=num_monte, r_range=r_range, beta_range=beta_range, **kwargs)
 
     def analyze(self, alpha_selection_methods, **kwargs) -> dict:
         use_gpu = kwargs.get('use_gpu', None)
@@ -69,41 +73,36 @@ class AUC_analysis(R_Beta_Space):
         print(f'Running on single_heatmap_auc_vs_r_beta_range {kwargs}')
         kwargs['use_gpu'] = True
         auc_dict =self.analyze(alpha_selection_methods=alpha_selection_method, **kwargs)
-        alphas, auc = self.collect_values(auc_dict)
+        alphas, aucs = self.collect_values(auc_dict)
         num_monte, N = self.single_rare_weak_shape
         str_method = str_transform_method(**kwargs)
         title=f'p_value transform: {str_method}\n{N=} {num_monte=} {alphas[0]}'
-        self.heatmap(data=auc[0], title=title, data_min=0.5, data_max=1.0, value_name='AUC')
+        self.heatmap(data=aucs[0], title=title)
 
+    def heatmap(self, data: np.ndarray, title: str) -> None:
+        super(AUC_analysis, self).heatmap(data=data, title=title, data_min=0.5, data_max=1.0, value_name='AUC')
 
-    def multi_heatmap(self, recipe: list[str|tuple], **kwargs) -> None:
-        aucs = []
+    def multi_heatmap(self, recipe: list[str|tuple], alpha_methods: list, **kwargs) -> None:
+        all_aucs = []
         titles = []
-        for recipe_method in recipe:
+        num_monte, N = self.single_rare_weak_shape
+        for recipe_method, alpha_method in zip(recipe,alpha_methods):
             if isinstance(recipe_method,str):
                 recipe_method = (recipe_method,None,None)
-                transform_method, discovery_method, alpha_method = recipe_method
-                auc =analyze_auc_r_beta_ranges(\
-                    r_range=r_range, beta_range=beta_range,\
-                    N=N, num_monte=num_monte,\
-                    transform_method=transform_method,\
-                    discovery_method=discovery_method,\
-                    alpha_selection_methods=alpha_method,\
-                    use_gpu=True, **kwargs)
-                title = transform_method
-                if discovery_method:
-                    title += f' {discovery_method=}'
-                title += f' (alpha={alpha_method})'
-                visualization.heatmap_r_beta_range(\
-                    r_range=r_range,\
-                    beta_range=beta_range,\
-                    data=auc,\
-                    value_name='AUC', data_min=0.5, data_max=None,\
-                    title=f'{title}\n{N=} {num_monte=}')
-                titles.append(title)
-            aucs.append(auc)
-        aucs = np.array(aucs)
-        argmax = aucs.argmax(axis=0).astype(np.uint32)
-        visualization.imagemap_r_beta_range(r_range=r_range, beta_range=beta_range,\
-                                            data=argmax, labels=titles,\
-                                            title='Best statisti to detect signal using AUC')
+            transform_method, discover_dominant, discover_min = recipe_method
+            auc_dict = self.analyze(alpha_selection_methods=alpha_method,\
+                                    transform_method=transform_method,\
+                                    discover_dominant=discover_dominant,\
+                                    discover_min=discover_min,\
+                                    use_gpu=True, **kwargs)
+            alphas, aucs = self.collect_values(auc_dict)
+            str_method = str_transform_method(transform_method=transform_method,\
+                                              discover_dominant=discover_dominant,\
+                                              discover_min=discover_min)
+            for str_alpha, auc in zip(alphas,aucs):
+                title=f'p_value transform: {str_method}\n{N=} {num_monte=} {str_alpha}'
+                self.heatmap(data=auc, title=title)
+                titles.append(str_method + ' ' + str_alpha)
+            all_aucs.extend(aucs)
+        argmax = self.select_best_param(all_aucs)
+        self.imagemap(data=argmax, labels=titles, title='Best statisti to detect signal using AUC', **kwargs)
