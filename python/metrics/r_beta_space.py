@@ -134,16 +134,16 @@ class R_Beta_Space:
         return params, data
     
 
-    def select_best_param(self, select_alpha: dict, argmax: bool = True) -> tuple[list,np.ndarray]:
-        params, data = self.collect_values(select_alpha=select_alpha)
-        data = np.array(data)
+    def select_best_param(self, collected_data: list[np.ndarray], argmax: bool = True) -> np.ndarray:
+        data = np.array(collected_data)
         assert data.ndim == 3
         assert data.shape[1:] == self.r_beta_shape
         if argmax:
              data = data.argmax(axis=0)
         else:
              data = data.argmin(axis=0)
-        return params, data.astype(np.uint32)
+        return data.astype(np.uint32)
+    
 
 
     def heatmap(self,
