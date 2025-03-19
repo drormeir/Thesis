@@ -236,3 +236,23 @@ def discover_by_method_arg(\
                             argmin=num_discoveries_output,\
                             **kwargs)
 
+
+def str_transform_method(\
+        transform_method: str,\
+        discover_dominant: bool|None = None,\
+        discover_min: bool|None = None,\
+        **kwargs) -> str:
+    assert transform_method in available_transform_methods, f'{transform_method=} not in {available_transform_methods=}'
+    if transform_method == 'identity':
+        assert discover_dominant is None or not discover_dominant
+        assert discover_min is None or not discover_min
+        return f'Identity (p-value at alpha)'
+    if discover_min is None:
+        discover_min = True
+    if discover_dominant is None:
+        discover_dominant = False
+    str_discover_min_max = 'Min' if discover_min else 'Max'
+    if discover_dominant:
+        return transform_method + ': Dominant ' + str_discover_min_max
+    else:
+        return transform_method + ': ' + str_discover_min_max + ' p-value'
