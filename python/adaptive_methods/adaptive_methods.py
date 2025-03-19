@@ -83,8 +83,8 @@ def apply_transform_discovery_method(\
         sorted_p_values_input_output: HybridArray,\
         num_discoveries_output: HybridArray|None,\
         transform_method: str,\
-        discover_dominant: bool|None,\
-        discover_min: bool|None,\
+        discover_dominant: bool|None = None,\
+        discover_min: bool|None = None,\
         **kwargs) -> None:
     assert transform_method in available_transform_methods, f'{transform_method=} not in {available_transform_methods=}'
     apply_transform_method(\
@@ -92,10 +92,15 @@ def apply_transform_discovery_method(\
         transform_method=transform_method,\
         **kwargs)
     if transform_method == 'identity':
-        assert discover_dominant is None
-        assert discover_min is None
+        assert discover_dominant is None or not discover_dominant
+        assert discover_min is None or not discover_min
         discover_dominant = False
         discover_min = False
+    else:
+        if discover_dominant is None:
+            discover_dominant = False
+        if discover_min is None:
+            discover_min = True
     assert discover_dominant is not None
     assert discover_min is not None
     if num_discoveries_output is None:
@@ -247,10 +252,10 @@ def str_transform_method(\
         assert discover_dominant is None or not discover_dominant
         assert discover_min is None or not discover_min
         return f'Identity (p-value at alpha)'
-    if discover_min is None:
-        discover_min = True
     if discover_dominant is None:
         discover_dominant = False
+    if discover_min is None:
+        discover_min = True
     str_discover_min_max = 'Min' if discover_min else 'Max'
     if discover_dominant:
         return transform_method + ': Dominant ' + str_discover_min_max
