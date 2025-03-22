@@ -260,4 +260,4 @@ def str_transform_method(\
     if discover_dominant:
         return transform_method + ': Dominant ' + str_discover_min_max
     else:
-        return transform_method + ': ' + str_discover_min_max + ' p-value'
+        return transform_method + ': ' + str_discover_min_max + ' transformed p-value'

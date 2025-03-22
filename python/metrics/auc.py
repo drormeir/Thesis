@@ -105,7 +105,7 @@ class AUC_analysis(R_Beta_Space):
             for alpha, auc in zip(alphas,aucs):
                 title=f'p_value transform: {str_method}\n{N=} {num_monte=} {alpha}'
                 self.heatmap(data=auc, title=title)
-                titles.append(str_method + ' ' + alpha)
+                titles.append(str_method + f' ({alpha})')
             all_aucs.extend(aucs)
         argmax = self.select_best_param(all_aucs)
         self.imagemap(data=argmax, labels=titles, title='Best statisti to detect signal using AUC', **kwargs)
