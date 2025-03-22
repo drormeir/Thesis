@@ -18,6 +18,7 @@ class AUC_analysis(R_Beta_Space):
                  **kwargs) -> None:
         super(AUC_analysis, self).__init__(N=N, num_monte=num_monte, r_range=r_range, beta_range=beta_range, **kwargs)
 
+
     def analyze(self, alpha_selection_methods, **kwargs) -> dict:
         use_gpu = kwargs.get('use_gpu', None)
         num_executions = self.r_beta_size
@@ -79,8 +80,10 @@ class AUC_analysis(R_Beta_Space):
         title=f'p_value transform: {str_method}\n{N=} {num_monte=} {alphas[0]}'
         self.heatmap(data=aucs[0], title=title)
 
+
     def heatmap(self, data: np.ndarray, title: str) -> None:
         super(AUC_analysis, self).heatmap(data=data, title=title, data_min=0.5, data_max=1.0, value_name='AUC')
+
 
     def multi_heatmap(self, recipe: list[str|tuple], alpha_methods: list, **kwargs) -> None:
         all_aucs = []
@@ -99,10 +102,10 @@ class AUC_analysis(R_Beta_Space):
             str_method = str_transform_method(transform_method=transform_method,\
                                               discover_dominant=discover_dominant,\
                                               discover_min=discover_min)
-            for str_alpha, auc in zip(alphas,aucs):
-                title=f'p_value transform: {str_method}\n{N=} {num_monte=} {str_alpha}'
+            for alpha, auc in zip(alphas,aucs):
+                title=f'p_value transform: {str_method}\n{N=} {num_monte=} {alpha}'
                 self.heatmap(data=auc, title=title)
-                titles.append(str_method + ' ' + str_alpha)
+                titles.append(str_method + ' ' + alpha)
             all_aucs.extend(aucs)
         argmax = self.select_best_param(all_aucs)
         self.imagemap(data=argmax, labels=titles, title='Best statisti to detect signal using AUC', **kwargs)

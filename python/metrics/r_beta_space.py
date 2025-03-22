@@ -107,10 +107,10 @@ class R_Beta_Space:
                             save_values['min'] = minval_numpy
                     continue
                 if alpha_method == 'first':
-                    selection_results[alpha_method] = self.reshape_selected_column(r_beta_full_results, select_col = 0)
+                    selection_results['according to lowest p-value'] = self.reshape_selected_column(r_beta_full_results, select_col = 0)
                     continue
                 if alpha_method == 'last':
-                    selection_results[alpha_method] = self.reshape_selected_column(r_beta_full_results, select_col = -1)
+                    selection_results['according to highest p-value'] = self.reshape_selected_column(r_beta_full_results, select_col = -1)
                     continue
             assert False, f'{alpha_selection_methods=}'
         return selection_results
@@ -129,7 +129,16 @@ class R_Beta_Space:
                 data += [sub.reshape(self.r_beta_shape) for sub in sub_values]
                 continue
             assert isinstance(value, np.ndarray)
-            params.append(f'{key}')
+            if isinstance(key, tuple):
+                str_key = f'{key[0]}'
+                for a in key[1:]:
+                    if isinstance(a,str):
+                        str_key += ' ' + a
+                    else:
+                        str_key += f'={a}'
+                params.append(str_key)
+            else:
+                params.append(f'{key}')
             data.append(value.reshape(self.r_beta_shape))
         return params, data
     

@@ -251,7 +251,7 @@ def str_transform_method(\
     if transform_method == 'identity':
         assert discover_dominant is None or not discover_dominant
         assert discover_min is None or not discover_min
-        return f'Identity (p-value at alpha)'
+        return 'Identity'
     if discover_dominant is None:
         discover_dominant = False
     if discover_min is None:
