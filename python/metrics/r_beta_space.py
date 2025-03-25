@@ -66,53 +66,40 @@ class R_Beta_Space:
         if not isinstance(alpha_selection_methods,list):
             alpha_selection_methods = [alpha_selection_methods]
         selection_results = {}
-        save_values = {}
         N = r_beta_full_results.ncols()
-        for alpha_method in alpha_selection_methods:
-            if isinstance(alpha_method,tuple):
-                alpha_power = alpha_method[1]
-                selection_results[('alpha_power',alpha_power)] =\
-                    self.reshape_selected_column(r_beta_full_results, select_col=alpha_power, is_power=True)
-                continue
-            if isinstance(alpha_method, (float, np.floating)):
-                selection_results[('alpha',alpha_method)] =\
-                    self.reshape_selected_column(r_beta_full_results, select_col=alpha_method, is_power=False)
-                continue
-            if isinstance(alpha_method,str):
-                if alpha_method in save_values:
-                    selection_results[alpha_method] = save_values.pop(alpha_method)
+        with (HybridArray() as arg_minmax, HybridArray() as val_minmax):
+            for alpha_method in alpha_selection_methods:
+                if isinstance(alpha_method,tuple):
+                    alpha_power = alpha_method[1]
+                    selection_results[('alpha_power',alpha_power)] =\
+                        self.reshape_selected_column(r_beta_full_results, select_col=alpha_power, is_power=True)
                     continue
-                if alpha_method in ['max', 'argmax']: 
-                    with (HybridArray() as argmax, HybridArray() as maxval):
-                        max_column_along_rows(r_beta_full_results,argmax=argmax,maxval=maxval)
-                        maxval_numpy = self.reshape_selected_column(maxval)
-                        argmax_numpy = (self.reshape_selected_column(argmax)+1)/N
-                        if alpha_method == 'max':
-                            selection_results[alpha_method] = maxval_numpy
-                            save_values['argmax'] = argmax_numpy
-                        else:
-                            selection_results[alpha_method] = argmax_numpy
-                            save_values['max'] = maxval_numpy
+                if isinstance(alpha_method, (float, np.floating)):
+                    selection_results[('alpha',alpha_method)] =\
+                        self.reshape_selected_column(r_beta_full_results, select_col=alpha_method, is_power=False)
                     continue
-                if alpha_method in ['min', 'argmin']: 
-                    with (HybridArray() as argmin, HybridArray() as minval):
-                        min_column_along_rows(r_beta_full_results,argmin=argmin,minval=minval)
-                        minval_numpy = self.reshape_selected_column(minval)
-                        argmin_numpy = (self.reshape_selected_column(argmin)+1)/N
-                        if alpha_method == 'min':
-                            selection_results[alpha_method] = minval_numpy
-                            save_values['argmin'] = argmin_numpy
-                        else:
-                            selection_results[alpha_method] = argmin_numpy
-                            save_values['min'] = minval_numpy
-                    continue
-                if alpha_method == 'first':
-                    selection_results['according to lowest p-value'] = self.reshape_selected_column(r_beta_full_results, select_col = 0)
-                    continue
-                if alpha_method == 'last':
-                    selection_results['according to highest p-value'] = self.reshape_selected_column(r_beta_full_results, select_col = -1)
-                    continue
-            assert False, f'{alpha_selection_methods=}'
+                if isinstance(alpha_method,str):
+                    if alpha_method == 'max_metric': 
+                        max_column_along_rows(r_beta_full_results,argmax=arg_minmax,maxval=val_minmax)
+                        maxval_numpy = self.reshape_selected_column(val_minmax)
+                        argmax_numpy = (self.reshape_selected_column(arg_minmax)+1)/N
+                        selection_results[alpha_method] = maxval_numpy
+                        selection_results['argmax_metric'] = argmax_numpy
+                        continue
+                    if alpha_method == 'min_metric': 
+                        min_column_along_rows(r_beta_full_results,argmin=arg_minmax,minval=val_minmax)
+                        minval_numpy = self.reshape_selected_column(val_minmax)
+                        argmin_numpy = (self.reshape_selected_column(arg_minmax)+1)/N
+                        selection_results[alpha_method] = minval_numpy
+                        selection_results['argmin_metric'] = argmin_numpy
+                        continue
+                    if alpha_method == 'first':
+                        selection_results['according to lowest p-value'] = self.reshape_selected_column(r_beta_full_results, select_col = 0)
+                        continue
+                    if alpha_method == 'last':
+                        selection_results['according to highest p-value'] = self.reshape_selected_column(r_beta_full_results, select_col = -1)
+                        continue
+                assert False, f'{alpha_selection_methods=}'
         return selection_results
 
 
@@ -120,9 +107,6 @@ class R_Beta_Space:
         params = []
         data = []
         for key, value in select_alpha.items():
-            if 'arg' in key:
-                # bypass maxarg, minarg
-                continue
             if isinstance(value, dict):
                 sub_list, sub_values = self.collect_values(select_alpha=value)
                 params += [f'{key}={sub}' for sub in sub_list]
@@ -143,16 +127,35 @@ class R_Beta_Space:
         return params, data
     
 
-    def select_best_param(self, collected_data: list[np.ndarray], argmax: bool = True) -> np.ndarray:
+    def filterout_key_values(self, subkeys: list[str], params: list[str], collected_data: list[np.ndarray]) -> tuple[list[str],list[np.ndarray]]:
+        res_params = []
+        res_data = []
+        for p,d in zip(params,collected_data):
+            if any([k in p for k in subkeys]):
+                continue
+            res_params.append(p)
+            res_data.append(d)
+        return res_params, res_data
+
+
+    def select_best_param(self, collected_data: list[np.ndarray], argmax: bool) -> tuple[np.ndarray, np.ndarray]:
         data = np.array(collected_data)
         assert data.ndim == 3
         assert data.shape[1:] == self.r_beta_shape
         if argmax:
-             data = data.argmax(axis=0)
+            partitioned = np.partition(data, -2, axis=0)  # partition to get 2 largest
+            max_values = partitioned[-1, :, :]  # largest values
+            second_best = partitioned[-2, :, :]  # second largest values
+            differences = max_values - second_best
+            data = data.argmax(axis=0)
         else:
-             data = data.argmin(axis=0)
-        return data.astype(np.uint32)
-    
+            partitioned = np.partition(data, 2, axis=0)  # partition to get 2 smallest
+            min_values = partitioned[0, :, :]  # smallest values
+            second_best = partitioned[1, :, :]  # second largest values
+            differences = second_best - min_values
+            data = data.argmin(axis=0)
+        return data.astype(np.uint32), differences
+
 
 
     def heatmap(self,

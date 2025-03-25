@@ -63,7 +63,6 @@ class AUC_analysis(R_Beta_Space):
                     else:
                         detect_signal_auc_py(noise.numpy(), signal.numpy(), auc_row.numpy())
                 auc_result.uncrop()
-
                 pbar.update(1)
         return self.select_by_alpha(r_beta_full_results=auc_result, alpha_selection_methods=alpha_selection_methods)
 
@@ -78,16 +77,14 @@ class AUC_analysis(R_Beta_Space):
         num_monte, N = self.single_rare_weak_shape
         str_method = str_transform_method(**kwargs)
         title=f'p_value transform: {str_method}\n{N=} {num_monte=} {alphas[0]}'
-        self.heatmap(data=aucs[0], title=title)
+        self.heatmap(data=aucs[0], title=title, data_min=0.5, data_max=1.0, value_name='AUC')
 
 
-    def heatmap(self, data: np.ndarray, title: str) -> None:
-        super(AUC_analysis, self).heatmap(data=data, title=title, data_min=0.5, data_max=1.0, value_name='AUC')
-
-
-    def multi_heatmap(self, recipe: list[str|tuple], alpha_methods: list, **kwargs) -> None:
-        all_aucs = []
-        titles = []
+    def multi_heatmap(self, recipe: list[str|tuple], alpha_methods: list, seperate_max_best: bool=True, **kwargs) -> None:
+        all_methods_aucs = []
+        all_methods_titles = []
+        max_methods_aucs = []
+        max_methods_titles = []
         num_monte, N = self.single_rare_weak_shape
         for recipe_method, alpha_method in zip(recipe,alpha_methods):
             if isinstance(recipe_method,str):
@@ -104,8 +101,21 @@ class AUC_analysis(R_Beta_Space):
                                               discover_min=discover_min)
             for alpha, auc in zip(alphas,aucs):
                 title=f'p_value transform: {str_method}\n{N=} {num_monte=} {alpha}'
-                self.heatmap(data=auc, title=title)
-                titles.append(str_method + f' ({alpha})')
-            all_aucs.extend(aucs)
-        argmax = self.select_best_param(all_aucs)
-        self.imagemap(data=argmax, labels=titles, title='Best statisti to detect signal using AUC', **kwargs)
+                if 'arg' in alpha:
+                    self.heatmap(data=auc, title=title, value_name='alpha')
+                    continue
+                self.heatmap(data=auc, title=title, data_min=0.5, data_max=1.0, value_name='AUC')
+                best_title = str_method + f' ({alpha})'
+                if 'max' in alpha and seperate_max_best:
+                    max_methods_aucs.append(auc)
+                    max_methods_titles.append(best_title)
+                else:
+                    all_methods_aucs.append(auc)
+                    all_methods_titles.append(best_title)
+        for aucs, titles in zip([all_methods_aucs, max_methods_aucs], [all_methods_titles, max_methods_titles]):
+            assert len(aucs) == len(titles)
+            if len(aucs) < 2:
+                continue
+            ind_best_method, diff = self.select_best_param(aucs, True)
+            self.imagemap(data=ind_best_method, labels=titles, title='Best statisti to detect signal using AUC', **kwargs)
+            self.heatmap(data=diff, title='Second best analysis of methods', data_min=0.0, data_max=0.5, value_name='Diff to 2nd best AUC')
