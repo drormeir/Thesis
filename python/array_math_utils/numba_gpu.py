@@ -53,18 +53,22 @@ else:
         cupy.asarray(array).sort(axis=1)
 
     def max_column_along_rows_gpu(array: DeviceNDArray, argmax: DeviceNDArray, maxval: DeviceNDArray) -> None:
+        assert array.dtype == maxval.dtype
+        assert argmax.dtype == np.uint32
         array_cupy = cupy.asarray(array)
         maxval_cupy = cupy.asarray(maxval).reshape(-1)
         argmax_cupy = cupy.asarray(argmax).reshape(-1)
         cupy.max(array_cupy, axis=1, out=maxval_cupy)
-        cupy.argmax(array_cupy, axis=1, out=argmax_cupy, dtype=np.uint32)
+        cupy.argmax(array_cupy, axis=1, out=argmax_cupy)
 
     def min_column_along_rows_gpu(array: DeviceNDArray, argmin: DeviceNDArray, minval: DeviceNDArray) -> None:
+        assert array.dtype == minval.dtype
+        assert argmin.dtype == np.uint32
         array_cupy = cupy.asarray(array)
         minval_cupy = cupy.asarray(minval).reshape(-1)
         argmin_cupy = cupy.asarray(argmin).reshape(-1)
         cupy.min(array_cupy, axis=1, out=minval_cupy)
-        cupy.argmin(array_cupy, axis=1, out=argmin_cupy, dtype=np.uint32)
+        cupy.argmin(array_cupy, axis=1, out=argmin_cupy)
 
     @numba.cuda.jit(device=False)
     def cumulative_argmin_gpu(array: DeviceNDArray, argmin: DeviceNDArray) -> None:
