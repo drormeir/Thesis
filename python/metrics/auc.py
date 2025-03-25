@@ -81,6 +81,7 @@ class AUC_analysis(R_Beta_Space):
 
 
     def multi_heatmap(self, recipe: list[str|tuple], alpha_methods: list, seperate_max_best: bool=True, **kwargs) -> None:
+        assert len(recipe) == len(alpha_methods)
         all_methods_aucs = []
         all_methods_titles = []
         max_methods_aucs = []
