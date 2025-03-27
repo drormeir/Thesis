@@ -28,6 +28,12 @@ if not cpu_njit_num_threads:
         raise_njit_not_available()
     def max_column_along_rows_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
+    def argmax_column_along_rows_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def min_column_along_rows_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def argmin_column_along_rows_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
 else:
     import numpy as np
     import numba
@@ -210,23 +216,39 @@ else:
 
 
     @numba.njit(parallel=True)
-    def max_column_along_rows_cpu_njit(array: np.ndarray, argmax: np.ndarray, maxval: np.ndarray) -> None:
+    def max_column_along_rows_cpu_njit(array: np.ndarray, maxval: np.ndarray) -> None:
+        rows = array.shape[0]
+        chunks_ranges = split2chunks(rows)
+        for ind_chunck in numba.prange(chunks_ranges.shape[0]):
+            begin, end = chunks_ranges[ind_chunck]
+            array[begin:end].max(axis=1, out=maxval[begin:end])
+
+
+    @numba.njit(parallel=True)
+    def argmax_column_along_rows_cpu_njit(array: np.ndarray, argmax: np.ndarray) -> None:
         rows = array.shape[0]
         chunks_ranges = split2chunks(rows)
         for ind_chunck in numba.prange(chunks_ranges.shape[0]):
             begin, end = chunks_ranges[ind_chunck]
             array[begin:end].argmax(axis=1, out=argmax[begin:end])
-            array[begin:end].max(axis=1, out=maxval[begin:end])
 
 
     @numba.njit(parallel=True)
-    def min_column_along_rows_cpu_njit(array: np.ndarray, argmin: np.ndarray, minval: np.ndarray) -> None:
+    def min_column_along_rows_cpu_njit(array: np.ndarray, minval: np.ndarray) -> None:
+        rows = array.shape[0]
+        chunks_ranges = split2chunks(rows)
+        for ind_chunck in numba.prange(chunks_ranges.shape[0]):
+            begin, end = chunks_ranges[ind_chunck]
+            array[begin:end].min(axis=1, out=minval[begin:end])
+
+
+    @numba.njit(parallel=True)
+    def argmin_column_along_rows_cpu_njit(array: np.ndarray, argmin: np.ndarray) -> None:
         rows = array.shape[0]
         chunks_ranges = split2chunks(rows)
         for ind_chunck in numba.prange(chunks_ranges.shape[0]):
             begin, end = chunks_ranges[ind_chunck]
             array[begin:end].argmin(axis=1, out=argmin[begin:end])
-            array[begin:end].min(axis=1, out=minval[begin:end])
 
 
     @numba.njit(parallel=False)

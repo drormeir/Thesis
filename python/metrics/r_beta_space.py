@@ -3,7 +3,7 @@ from matplotlib.axes import Axes
 from matplotlib.image import AxesImage
 import numpy as np
 from python.hpc import HybridArray
-from python.array_math_utils.array_math_utils import max_column_along_rows, min_column_along_rows
+from python.array_math_utils.array_math_utils import max_column_along_rows, argmax_column_along_rows, min_column_along_rows, argmin_column_along_rows
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
@@ -28,13 +28,16 @@ class R_Beta_Space:
         self.single_rare_weak_shape = (num_monte, N)
         self.r_beta_full_results_reshaped = (self.r_range.size, self.beta_range.size, N)
 
+
     def alloc_r_beta_full_results(self, dtype: type = np.float64, use_gpu: bool|None = None) -> HybridArray:
         return HybridArray().realloc(shape=self.r_beta_full_results_shape, dtype=dtype, use_gpu=use_gpu)
+
 
     def get_full_result(self, r_beta_full_results: HybridArray) -> np.ndarray:
         r_beta_full_results.uncrop()
         assert r_beta_full_results.shape() == self.r_beta_full_results_shape
         return r_beta_full_results.numpy().reshape(self.r_beta_full_results_reshaped)
+
 
     def reshape_selected_column(self,\
                                 data: np.ndarray|HybridArray,\
@@ -60,6 +63,7 @@ class R_Beta_Space:
             column = data
         return column.reshape(self.r_beta_shape).astype(np.float32)
     
+
     def select_by_alpha(self, r_beta_full_results: HybridArray, alpha_selection_methods: list|str|float|tuple) -> dict:
         r_beta_full_results.uncrop()
         assert r_beta_full_results.shape() == self.r_beta_full_results_shape
@@ -80,17 +84,19 @@ class R_Beta_Space:
                     continue
                 if isinstance(alpha_method,str):
                     if alpha_method == 'max_metric': 
-                        max_column_along_rows(r_beta_full_results,argmax=arg_minmax,maxval=val_minmax)
-                        maxval_numpy = self.reshape_selected_column(val_minmax)
+                        max_column_along_rows(r_beta_full_results, maxval=val_minmax)
+                        selection_results[alpha_method] = self.reshape_selected_column(val_minmax)
+                        argmax_column_along_rows(r_beta_full_results, argmax=arg_minmax)
                         argmax_numpy = (self.reshape_selected_column(arg_minmax)+1)/N
-                        selection_results[alpha_method] = maxval_numpy
+                        argmax_numpy[argmax_numpy < 1.5/N] = 0
                         selection_results['argmax_metric'] = argmax_numpy
                         continue
                     if alpha_method == 'min_metric': 
-                        min_column_along_rows(r_beta_full_results,argmin=arg_minmax,minval=val_minmax)
-                        minval_numpy = self.reshape_selected_column(val_minmax)
+                        min_column_along_rows(r_beta_full_results, minval=val_minmax)
+                        selection_results[alpha_method] = self.reshape_selected_column(val_minmax)
+                        argmin_column_along_rows(r_beta_full_results, argmin=arg_minmax)
                         argmin_numpy = (self.reshape_selected_column(arg_minmax)+1)/N
-                        selection_results[alpha_method] = minval_numpy
+                        argmin_numpy[argmin_numpy < 1.5/N] = 0
                         selection_results['argmin_metric'] = argmin_numpy
                         continue
                     if alpha_method == 'first':
@@ -155,7 +161,6 @@ class R_Beta_Space:
             differences = second_best - min_values
             data = data.argmin(axis=0)
         return data.astype(np.uint32), differences
-
 
 
     def heatmap(self,

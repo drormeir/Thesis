@@ -29,6 +29,12 @@ if not globals.cuda_available:
         raise_cuda_not_available()
     def max_column_along_rows_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
+    def argmax_column_along_rows_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
+    def min_column_along_rows_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
+    def argmin_column_along_rows_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
 else:
     import numpy as np
     import numba
@@ -49,25 +55,36 @@ else:
         avg_cupy = cupy.asarray(out_column)
         cupy.mean(array_cupy, axis=1, keepdims=True, out=avg_cupy)
 
+
     def sort_rows_inplace_gpu(array: DeviceNDArray) -> None:
         cupy.asarray(array).sort(axis=1)
 
-    def max_column_along_rows_gpu(array: DeviceNDArray, argmax: DeviceNDArray, maxval: DeviceNDArray) -> None:
+
+    def max_column_along_rows_gpu(array: DeviceNDArray, maxval: DeviceNDArray) -> None:
         assert array.dtype == maxval.dtype
-        assert argmax.dtype == np.uint32
         array_cupy = cupy.asarray(array)
         maxval_cupy = cupy.asarray(maxval).reshape(-1)
-        argmax_cupy = cupy.asarray(argmax).reshape(-1)
         cupy.max(array_cupy, axis=1, out=maxval_cupy)
+
+
+    def argmax_column_along_rows_gpu(array: DeviceNDArray, argmax: DeviceNDArray) -> None:
+        assert argmax.dtype == np.uint32
+        array_cupy = cupy.asarray(array)
+        argmax_cupy = cupy.asarray(argmax).reshape(-1)
         cupy.argmax(array_cupy, axis=1, out=argmax_cupy)
 
-    def min_column_along_rows_gpu(array: DeviceNDArray, argmin: DeviceNDArray, minval: DeviceNDArray) -> None:
+
+    def min_column_along_rows_gpu(array: DeviceNDArray, minval: DeviceNDArray) -> None:
         assert array.dtype == minval.dtype
-        assert argmin.dtype == np.uint32
         array_cupy = cupy.asarray(array)
         minval_cupy = cupy.asarray(minval).reshape(-1)
-        argmin_cupy = cupy.asarray(argmin).reshape(-1)
         cupy.min(array_cupy, axis=1, out=minval_cupy)
+
+
+    def argmin_column_along_rows_gpu(array: DeviceNDArray, argmin: DeviceNDArray) -> None:
+        assert argmin.dtype == np.uint32
+        array_cupy = cupy.asarray(array)
+        argmin_cupy = cupy.asarray(argmin).reshape(-1)
         cupy.argmin(array_cupy, axis=1, out=argmin_cupy)
 
     @numba.cuda.jit(device=False)
