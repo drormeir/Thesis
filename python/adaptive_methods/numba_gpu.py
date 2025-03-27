@@ -1,6 +1,6 @@
 from python.hpc import globals
 
-if not globals.cpu_njit_num_threads:
+if not globals.cuda_available:
     # Mock API
     from python.hpc import raise_cuda_not_available
     def higher_criticism_gpu(**kwargs) -> None: # type: ignore
@@ -12,6 +12,12 @@ if not globals.cpu_njit_num_threads:
     def berk_jones_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
     def calc_lgamma_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
+    def berk_jones_gpu_max_iter(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
+    def berk_jones_legacy_gpu_max_iter(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
+    def berk_jones_gpu_execute(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
 else:
     import os

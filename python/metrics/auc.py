@@ -99,7 +99,7 @@ class AUC_analysis(R_Beta_Space):
                                     transform_method=transform_method,\
                                     discover_dominant=discover_dominant,\
                                     discover_min=discover_min,\
-                                    use_gpu=True, **kwargs)
+                                    use_gpu=None, **kwargs)
             alphas, aucs = self.collect_values(auc_dict)
             str_method = str_transform_method(transform_method=transform_method,\
                                               discover_dominant=discover_dominant,\

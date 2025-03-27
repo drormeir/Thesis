@@ -9,6 +9,10 @@ if not globals.cuda_available:
         raise_cuda_not_available()
     def splitmix64_matrix_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
+    def random_integer_base_states_matrix_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
+    def random_integers_2_p_values_gpu(**kwargs) -> None: # type: ignore
+        raise_cuda_not_available()
 else:
     import numpy as np
     import numba

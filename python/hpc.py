@@ -263,8 +263,11 @@ class HybridArray:
         self.close()
         
     def close(self, garbage_collect: bool = True) -> None:
+        # before clear state
+        is_gpu = self.is_gpu()
         self._clear_state()
-        if garbage_collect:
+        # after clear state
+        if garbage_collect and is_gpu:
             cuda_garbage_collect()
 
     def _clear_state(self) -> None:
