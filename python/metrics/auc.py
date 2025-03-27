@@ -16,7 +16,11 @@ class AUC_analysis(R_Beta_Space):
                  r_range: np.ndarray|list,\
                  beta_range: np.ndarray|list,\
                  **kwargs) -> None:
-        super(AUC_analysis, self).__init__(N=N, num_monte=num_monte, r_range=r_range, beta_range=beta_range, **kwargs)
+        super(AUC_analysis, self).__init__(\
+            N=N, num_monte=num_monte,\
+            r_range=r_range, beta_range=beta_range,\
+            base_metric_for_risk_factor=None,\
+            **kwargs)
 
 
     def analyze(self, alpha_selection_methods, **kwargs) -> dict:
@@ -103,7 +107,10 @@ class AUC_analysis(R_Beta_Space):
             for alpha, auc in zip(alphas,aucs):
                 title=f'p_value transform: {str_method}\n{N=} {num_monte=} {alpha}'
                 if 'arg' in alpha:
-                    self.heatmap(data=auc, title=title, value_name='alpha')
+                    self.heatmap(data=auc, title=title, data_min=0.0, data_max=1.0, value_name='Optimal alpha')
+                    continue
+                if 'risk' in alpha:
+                    self.heatmap(data=auc, title=title, data_min=0.0, data_max=0.2, value_name='AUC Risk Diff')
                     continue
                 self.heatmap(data=auc, title=title, data_min=0.5, data_max=1.0, value_name='AUC')
                 best_title = str_method + f' ({alpha})'
@@ -119,4 +126,4 @@ class AUC_analysis(R_Beta_Space):
                 continue
             ind_best_method, diff = self.select_best_param(aucs, True)
             self.imagemap(data=ind_best_method, labels=titles, title='Best statisti to detect signal using AUC', **kwargs)
-            self.heatmap(data=diff, title='Second best analysis of methods', data_min=0.0, data_max=0.5, value_name='Diff to 2nd best AUC')
+            self.heatmap(data=diff, title='Second best analysis of methods', data_min=0.0, data_max=0.1, value_name='Diff to 2nd best AUC')

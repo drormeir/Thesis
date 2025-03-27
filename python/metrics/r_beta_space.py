@@ -3,7 +3,7 @@ from matplotlib.axes import Axes
 from matplotlib.image import AxesImage
 import numpy as np
 from python.hpc import HybridArray
-from python.array_math_utils.array_math_utils import max_column_along_rows, argmax_column_along_rows, min_column_along_rows, argmin_column_along_rows
+from python.array_math_utils.array_math_utils import max_column_along_rows, argmax_column_along_rows, min_column_along_rows, argmin_column_along_rows, average_column
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
@@ -14,6 +14,7 @@ class R_Beta_Space:
                  num_monte: int,\
                  r_range: np.ndarray|list,\
                  beta_range: np.ndarray|list,\
+                 base_metric_for_risk_factor: float|None,\
                  **kwargs) -> None:
         self.r_range = np.maximum(np.sort(r_range).reshape(-1), 0.0)
         self.beta_range = np.clip(np.sort(beta_range),0.0,1.0).reshape(-1)
@@ -27,7 +28,8 @@ class R_Beta_Space:
         self.r_beta_full_results_shape = (self.r_beta_size, N)
         self.single_rare_weak_shape = (num_monte, N)
         self.r_beta_full_results_reshaped = (self.r_range.size, self.beta_range.size, N)
-
+        self.base_metric_for_risk_factor = base_metric_for_risk_factor
+        self.risk_key = 'risk_diff_metric' if base_metric_for_risk_factor is None else 'risk_factor_metric'
 
     def alloc_r_beta_full_results(self, dtype: type = np.float64, use_gpu: bool|None = None) -> HybridArray:
         return HybridArray().realloc(shape=self.r_beta_full_results_shape, dtype=dtype, use_gpu=use_gpu)
@@ -38,6 +40,62 @@ class R_Beta_Space:
         assert r_beta_full_results.shape() == self.r_beta_full_results_shape
         return r_beta_full_results.numpy().reshape(self.r_beta_full_results_reshaped)
 
+
+    def select_by_alpha(self, r_beta_full_results: HybridArray, alpha_selection_methods: list|str|float|tuple) -> dict:
+        r_beta_full_results.uncrop()
+        assert r_beta_full_results.shape() == self.r_beta_full_results_shape
+        if not isinstance(alpha_selection_methods,list):
+            alpha_selection_methods = [alpha_selection_methods]
+        selection_results = {}
+        N = r_beta_full_results.ncols()
+        with (HybridArray() as arg_minmax, HybridArray() as val_minmax, HybridArray() as avg_column):
+            for alpha_method in alpha_selection_methods:
+                if isinstance(alpha_method,tuple):
+                    alpha_power = alpha_method[1]
+                    selection_results[('alpha_power',alpha_power)] =\
+                        self.reshape_selected_column(r_beta_full_results, select_col=alpha_power, is_power=True)
+                    continue
+                if isinstance(alpha_method, (float, np.floating)):
+                    selection_results[('alpha',alpha_method)] =\
+                        self.reshape_selected_column(r_beta_full_results, select_col=alpha_method, is_power=False)
+                    continue
+                if isinstance(alpha_method,str):
+                    if alpha_method == 'max_metric': 
+                        max_column_along_rows(r_beta_full_results, maxval=val_minmax)
+                        minmax_numpy = self.reshape_selected_column(val_minmax)
+                        selection_results[alpha_method] = minmax_numpy
+                        selection_results[self.risk_key] = self.calc_risk(r_beta_full_results, minmax_numpy, avg_column)
+                        argmax_column_along_rows(r_beta_full_results, argmax=arg_minmax)
+                        selection_results['argmax_metric'] = self.get_arg_minmax(arg_minmax)
+                        continue
+                    if alpha_method == 'min_metric': 
+                        min_column_along_rows(r_beta_full_results, minval=val_minmax)
+                        minmax_numpy = self.reshape_selected_column(val_minmax)
+                        selection_results[alpha_method] = minmax_numpy
+                        selection_results[self.risk_key] = self.calc_risk(r_beta_full_results, minmax_numpy, avg_column)
+                        argmin_column_along_rows(r_beta_full_results, argmin=arg_minmax)
+                        selection_results['argmin_metric'] = self.get_arg_minmax(arg_minmax)
+                        continue
+                    if alpha_method == 'first':
+                        selection_results['according to lowest p-value'] = self.reshape_selected_column(r_beta_full_results, select_col = 0)
+                        continue
+                    if alpha_method == 'last':
+                        selection_results['according to highest p-value'] = self.reshape_selected_column(r_beta_full_results, select_col = -1)
+                        continue
+                assert False, f'{alpha_selection_methods=}'
+        return selection_results
+
+
+    def get_arg_minmax(self, data: HybridArray) -> np.ndarray:
+        N = self.single_rare_weak_shape[1]
+        ret = self.reshape_selected_column(data)
+        assert ret.dtype == np.float32
+        ret = (ret+1.0)/N
+        assert ret.max() <= 1
+        ret[ret < 1.5/N] = 0.0  # numerical fix of edge case for asymptotical purpose
+        assert ret.dtype == np.float32
+        return ret
+    
 
     def reshape_selected_column(self,\
                                 data: np.ndarray|HybridArray,\
@@ -64,49 +122,19 @@ class R_Beta_Space:
         return column.reshape(self.r_beta_shape).astype(np.float32)
     
 
-    def select_by_alpha(self, r_beta_full_results: HybridArray, alpha_selection_methods: list|str|float|tuple) -> dict:
-        r_beta_full_results.uncrop()
-        assert r_beta_full_results.shape() == self.r_beta_full_results_shape
-        if not isinstance(alpha_selection_methods,list):
-            alpha_selection_methods = [alpha_selection_methods]
-        selection_results = {}
-        N = r_beta_full_results.ncols()
-        with (HybridArray() as arg_minmax, HybridArray() as val_minmax):
-            for alpha_method in alpha_selection_methods:
-                if isinstance(alpha_method,tuple):
-                    alpha_power = alpha_method[1]
-                    selection_results[('alpha_power',alpha_power)] =\
-                        self.reshape_selected_column(r_beta_full_results, select_col=alpha_power, is_power=True)
-                    continue
-                if isinstance(alpha_method, (float, np.floating)):
-                    selection_results[('alpha',alpha_method)] =\
-                        self.reshape_selected_column(r_beta_full_results, select_col=alpha_method, is_power=False)
-                    continue
-                if isinstance(alpha_method,str):
-                    if alpha_method == 'max_metric': 
-                        max_column_along_rows(r_beta_full_results, maxval=val_minmax)
-                        selection_results[alpha_method] = self.reshape_selected_column(val_minmax)
-                        argmax_column_along_rows(r_beta_full_results, argmax=arg_minmax)
-                        argmax_numpy = (self.reshape_selected_column(arg_minmax)+1)/N
-                        argmax_numpy[argmax_numpy < 1.5/N] = 0
-                        selection_results['argmax_metric'] = argmax_numpy
-                        continue
-                    if alpha_method == 'min_metric': 
-                        min_column_along_rows(r_beta_full_results, minval=val_minmax)
-                        selection_results[alpha_method] = self.reshape_selected_column(val_minmax)
-                        argmin_column_along_rows(r_beta_full_results, argmin=arg_minmax)
-                        argmin_numpy = (self.reshape_selected_column(arg_minmax)+1)/N
-                        argmin_numpy[argmin_numpy < 1.5/N] = 0
-                        selection_results['argmin_metric'] = argmin_numpy
-                        continue
-                    if alpha_method == 'first':
-                        selection_results['according to lowest p-value'] = self.reshape_selected_column(r_beta_full_results, select_col = 0)
-                        continue
-                    if alpha_method == 'last':
-                        selection_results['according to highest p-value'] = self.reshape_selected_column(r_beta_full_results, select_col = -1)
-                        continue
-                assert False, f'{alpha_selection_methods=}'
-        return selection_results
+    def calc_risk(self, r_beta_full_results: HybridArray,\
+                  minmax_numpy: np.ndarray,
+                  avg_column_container: HybridArray) -> np.ndarray:
+        average_column(r_beta_full_results, avg_column_container)
+        avg_numpy = self.reshape_selected_column(avg_column_container)
+        risk_diff = np.abs(minmax_numpy - avg_numpy)
+        if self.base_metric_for_risk_factor is None:
+            return risk_diff
+        risk_denominator = np.abs(minmax_numpy - self.base_metric_for_risk_factor)
+        approx_one = np.abs(risk_denominator-risk_diff) <= 1e-10
+        risk_diff[approx_one] = 1
+        risk_denominator[approx_one] = 1
+        return risk_diff/risk_denominator
 
 
     def collect_values(self, select_alpha: dict) -> tuple[list[str],list[np.ndarray]]:
