@@ -1,7 +1,7 @@
 import warnings
 import numpy as np
 
-from hpc import globals, raise_cuda_not_available, cuda_garbage_collect, calc_block_size, simple_data_size_to_grid_block_1D
+from .hpc import globals, raise_cuda_not_available, cuda_garbage_collect, calc_block_size, simple_data_size_to_grid_block_1D
 
 if not globals.cuda_available:
     # Define mock class to satisfy type checks

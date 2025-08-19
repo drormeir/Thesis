@@ -283,7 +283,7 @@ def raise_njit_not_available():
         raise AssertionError("numba.njit not available on this system.")
 
 
-def use_njit(**kwargs) -> bool:
+def is_use_njit(**kwargs) -> bool:
     if globals.cpu_njit_num_threads < 1:
         return False
     val = kwargs.get('use_njit', None)
