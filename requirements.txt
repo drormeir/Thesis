@@ -8,4 +8,5 @@ numba
 cupy-cuda12x
 torch
 scikit-learn
+tqdm
 
