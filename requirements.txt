@@ -1,0 +1,11 @@
+numpy
+pandas
+scipy
+matplotlib
+jupyter
+seaborn
+numba
+cupy-cuda12x
+torch
+scikit-learn
+
