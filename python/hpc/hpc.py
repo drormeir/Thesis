@@ -15,7 +15,7 @@ globals = SimpleNamespace(
     cuda_import_success = None
 )
 
-import subprocess, tempfile, os, re
+import subprocess, tempfile, os, re, errno
 
 def search_ptx_version_error(str_stderr: str, verbose: bool = True) -> tuple[str,str]:
     ptx_match = re.search(r"Unsupported .version (\d+\.\d+); current version is '(\d+\.\d+)'", str_stderr)
@@ -98,33 +98,67 @@ def run_command(command: list[str], sudo: bool=False, stream_output: bool=False,
     
     If stream_output is True, prints the command's output immediately as it's produced
     while capturing both stdout and stderr.
+    
+    Returns:
+        tuple[int, str]: (errno, output)
+            errno: 0 for success, or standard errno value for errors:
+                  EPERM(1): Operation not permitted (command failed)
+                  ENOENT(2): No such file or directory (command not found)
+                  EACCES(13): Permission denied
+                  EIO(5): Input/output error (general command failure)
+                  ETIMEDOUT(110): Connection timed out
+            output: Command output or error message
     """
-    str_command = ' '.join(command)
-    cmd = (['sudo'] + command) if sudo else command
+    str_command_4_print = ' '.join(command)
+    if sudo and command[0] != 'sudo':
+        command = ['sudo'] + command
 
     if not stream_output:
         try:
-            proc = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=timeout)
+            proc = subprocess.run(command, check=True, capture_output=True, text=True, timeout=timeout)
             output = proc.stdout.strip()
             stderr_output = proc.stderr.strip()
-        except subprocess.TimeoutExpired:
-            return 3, f"Command '{str_command}' timed out after {timeout} seconds."
+        except subprocess.TimeoutExpired as e:
+            return_message = f"Command '{str_command_4_print}' timed out after {timeout} seconds."
+            if e.stdout:
+                return_message += f'\nPartial output:\n{e.stdout.strip()}'
+            if e.stderr:
+                return_message += f'\nError message:\n{e.stderr.strip()}'
+            return errno.ETIMEDOUT, return_message
         except subprocess.CalledProcessError as e:
-            return 1, f"Error executing '{str_command}': {e.stderr}"
+            return_message = f"Command '{str_command_4_print}' failed with error code {e.returncode}"
+            if e.stdout:
+                return_message += f'\nPartial output:\n{e.stdout.strip()}'
+            if e.stderr:
+                return_message += f"\nError message: {e.stderr.strip()}"
+            return errno.EIO, return_message
         except Exception as e:
-            return 2, f"Unexpected error: {e}"
+            if isinstance(e, OSError):
+                return e.errno, f"System error executing '{str_command_4_print}': {e}"
+            return errno.EPERM, f"System error executing '{str_command_4_print}': {e}"
     else:
-        print(f'Executing shell command: {str_command}')
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        print(f'Executing shell command: {str_command_4_print}')
+        try:
+            proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        except Exception as e:
+            if isinstance(e, FileNotFoundError):
+                return errno.ENOENT, f"Command not found: '{str_command_4_print}'"
+            if isinstance(e, PermissionError):
+                return errno.EACCES, f"Permission denied: '{str_command_4_print}'"
+            if isinstance(e, OSError):
+                return e.errno, f"Failed to start '{str_command_4_print}': {e}"
+            return errno.EPERM, f"Failed to start '{str_command_4_print}': {e}"
+
         stdout_lines = []
         stderr_lines = []
 
-        # Nested function to read from a stream
         def read_stream(stream, output_lines):
-            for line in iter(stream.readline, ''):
-                print(line, end='')  # Print immediately
-                output_lines.append(line)
-            stream.close()
+            try:
+                for line in iter(stream.readline, ''):
+                    print(line, end='', flush=True)  # Print immediately
+                    output_lines.append(line)
+            finally:
+                stream.close()
 
         stdout_thread = threading.Thread(target=read_stream, args=(proc.stdout, stdout_lines))
         stderr_thread = threading.Thread(target=read_stream, args=(proc.stderr, stderr_lines))
@@ -132,22 +166,37 @@ def run_command(command: list[str], sudo: bool=False, stream_output: bool=False,
         stderr_thread.start()
 
         try:
-            proc.wait(timeout=timeout)
+            returncode = proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             proc.kill()
-            return 3, f"Command '{str_command}' timed out after {timeout} seconds."
+            stdout_thread.join(1)  # Give threads 1 second to finish
+            stderr_thread.join(1)
+            return_message = f"Command '{str_command_4_print}' timed out after {timeout} seconds."
+            if stdout_lines:
+                return_message += '\nPartial output:\n' + '\n'.join(stdout_lines)
+            if stderr_lines:
+                return_message += '\nError message:\n' + '\n'.join(stderr_lines)
+            return errno.ETIMEDOUT, return_message
 
         stdout_thread.join()
         stderr_thread.join()
-        # Combine the outputs (note that this does not preserve interleaving)
         output = '\n'.join(stdout_lines)
         stderr_output = '\n'.join(stderr_lines)
+
+        if returncode != 0:
+            return_message = f"Command '{str_command_4_print}' failed with code {returncode}"
+            if output:
+                return_message += '\nPartial output:\n' + output
+            if stderr_output:
+                return_message += '\nError message:\n' + stderr_output
+            return errno.EIO, return_message
+
     if stderr_output:
         if output:
-            output += '\n' + stderr_output
-        else:
-            output = stderr_output
-    return proc.returncode, output
+            output += '\n'
+        output += 'Error message:\n' + stderr_output
+
+    return os.EX_OK, output  # Standard for successful execution (0)
 
 
 def detect_cuda_compatibility_before_any_import(sudo: bool = False) -> bool:
