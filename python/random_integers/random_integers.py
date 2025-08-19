@@ -1,8 +1,8 @@
 import numpy as np
-from python.hpc import use_njit, HybridArray
-from python.random_integers.numba_gpu import random_integers_matrix_gpu, splitmix64_matrix_gpu, random_integer_base_states_matrix_gpu, random_integers_series_gpu, random_integers_2_p_values_gpu
-from python.random_integers.numba_cpu import random_integers_matrix_cpu_njit, splitmix64_from_states_cpu_njit, random_integer_base_states_from_seeds_cpu_njit, random_integers_series_cpu_njit, random_integers_2_p_values_cpu_njit
-from python.random_integers.python_native import random_integers_matrix_py, splitmix64_from_states_py, random_integer_base_states_from_seeds_py, random_integers_series_py
+from python.hpc import is_use_njit, HybridArray
+from .numba_gpu import random_integers_matrix_gpu, splitmix64_matrix_gpu, random_integers_base_states_matrix_gpu, random_integers_series_gpu, random_integers_2_p_values_gpu
+from .numba_cpu import random_integers_matrix_cpu_njit, splitmix64_matrix_cpu_njit, random_integers_base_states_matrix_cpu_njit, random_integers_series_cpu_njit, random_integers_2_p_values_cpu_njit
+from .python_native import random_integers_matrix_py, splitmix64_matrix_py, random_integers_base_states_matrix_py, random_integers_series_py, random_integers_2_p_values_py
 
 def random_num_steps(**kwargs) -> np.uint32:
     num_steps = kwargs.get('num_steps', None)
@@ -26,7 +26,7 @@ def random_integers_matrix(data: HybridArray,\
     else:
         # CPU mode
         assert data.numpy().dtype == np.uint64, f'{data.dtype()=} {data.numpy().dtype=}'
-        if use_njit(**kwargs):
+        if is_use_njit(**kwargs):
             random_integers_matrix_cpu_njit(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=data.numpy())
         else:
             random_integers_matrix_py(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=data.numpy())
@@ -48,10 +48,10 @@ def splitmix64_matrix(states: np.ndarray,\
     else:
         # CPU mode
         assert isinstance(states_array.data, np.ndarray)
-        if use_njit(**kwargs):
-            out_z_data, out_states_data = splitmix64_from_states_cpu_njit(states=states_array.data)
+        if is_use_njit(**kwargs):
+            out_z_data, out_states_data = splitmix64_matrix_cpu_njit(states=states_array.data)
         else:
-            out_z_data, out_states_data = splitmix64_from_states_py(states=states_array.data)
+            out_z_data, out_states_data = splitmix64_matrix_py(states=states_array.data)
         out_states.clone_from_numpy(out_states_data)
         out_z.clone_from_numpy(out_z_data)
     states_array.close()
@@ -70,14 +70,14 @@ def random_integers_base_states_matrix(\
         out_s0.realloc_like(seeds_array)
         out_s1.realloc_like(seeds_array)
         grid_shape, block_shape = seeds_array.gpu_grid_block2D_square_shapes()
-        random_integer_base_states_matrix_gpu[grid_shape, block_shape](seeds_array.data, out_s0.data, out_s1.data) # type: ignore
+        random_integers_base_states_matrix_gpu[grid_shape, block_shape](seeds_array.data, out_s0.data, out_s1.data) # type: ignore
     else:
         # CPU mode
         assert isinstance(seeds_array.data, np.ndarray)
-        if use_njit(**kwargs):
-            out_s0_data, out_s1_data = random_integer_base_states_from_seeds_cpu_njit(seeds=seeds_array.data)
+        if is_use_njit(**kwargs):
+            out_s0_data, out_s1_data = random_integers_base_states_matrix_cpu_njit(seeds=seeds_array.data)
         else:
-            out_s0_data, out_s1_data = random_integer_base_states_from_seeds_py(seeds=seeds_array.data)
+            out_s0_data, out_s1_data = random_integers_base_states_matrix_py(seeds=seeds_array.data)
         out_s0.clone_from_numpy(out_s0_data)
         out_s1.clone_from_numpy(out_s1_data)
     seeds_array.close()
@@ -92,7 +92,7 @@ def random_integers_series(data: HybridArray, seed: int|np.uint64, **kwargs) -> 
     else:
         # CPU mode
         assert isinstance(data.data, np.ndarray)
-        if use_njit(**kwargs):
+        if is_use_njit(**kwargs):
             random_integers_series_cpu_njit(seed=seed, out=data.data)
         else:
             random_integers_series_py(seed=seed, out=data.data)
@@ -107,7 +107,7 @@ def random_integers_2_p_values(integers: HybridArray, p_values: HybridArray, **k
         random_integers_2_p_values_gpu[grid_shape, block_shape](integers.gpu_data(), p_values.gpu_data()) # type: ignore
     else:
         # CPU mode
-        if use_njit(**kwargs):
+        if is_use_njit(**kwargs):
             random_integers_2_p_values_cpu_njit(integers.numpy(), p_values.numpy())
         else:
-            p_values.numpy()[:] = (integers.numpy() + np.float64(0.5))/np.float64(2.0**64)
+            random_integers_2_p_values_py(integers.numpy(), p_values.numpy())

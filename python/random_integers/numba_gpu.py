@@ -9,7 +9,7 @@ if not globals.cuda_available:
         raise_cuda_not_available()
     def splitmix64_matrix_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def random_integer_base_states_matrix_gpu(**kwargs) -> None: # type: ignore
+    def random_integers_base_states_matrix_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
     def random_integers_2_p_values_gpu(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
@@ -45,7 +45,7 @@ else:
                 z_row[ind_col], new_states_row[ind_col] = splitmix64_gpu(states_row[ind_col])
 
     @numba.cuda.jit(device=False)
-    def random_integer_base_states_matrix_gpu(seeds: DeviceNDArray, s0: DeviceNDArray, s1: DeviceNDArray):
+    def random_integers_base_states_matrix_gpu(seeds: DeviceNDArray, s0: DeviceNDArray, s1: DeviceNDArray):
         # Get the 2D indices of the current thread within the grid
         ind_row0, ind_col0 = numba.cuda.grid(2) # type: ignore
         # Calculate the strides

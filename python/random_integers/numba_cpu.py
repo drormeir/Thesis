@@ -9,6 +9,34 @@ if not globals.cpu_njit_num_threads:
         raise_njit_not_available()
     def random_integers_2_p_values_cpu_njit(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
+    def splitmix64_matrix_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def random_integers_base_states_matrix_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def random_integer_base_states_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def random_integer_states_transition_from_states_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def random_integer_states_transition_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def random_integer_result_from_states_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def random_integer_result_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def splitmix64_matrix_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def splitmix64_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def rotl64_array_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def rotl64_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def row_column_scramble_seeds_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def scramble_seed_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
+    def random_integers_2_p_values_cpu_njit(**kwargs) -> None: # type: ignore
+        raise_njit_not_available()
 else:
     import numpy as np
     import numba
@@ -16,7 +44,7 @@ else:
     @numba.njit(parallel=False)
     def random_integers_matrix_cpu_njit(num_steps: np.uint32, offset_row0: np.uint32, offset_col0: np.uint32, out: np.ndarray) -> None:
         row_column_scramble_seeds_cpu_njit(offset_row0=offset_row0, offset_col0=offset_col0, seeds=out)
-        s0, s1 = random_integer_base_states_from_seeds_cpu_njit(seeds=out)
+        s0, s1 = random_integers_base_states_matrix_cpu_njit(seeds=out)
         for _ in range(num_steps):
             s0, s1 = random_integer_states_transition_from_states_cpu_njit(s0=s0, s1=s1)
         random_integer_result_from_states_cpu_njit(s0=s0, s1=s1, result=out)
@@ -40,10 +68,10 @@ else:
             out[i] = random_integer_result_cpu_njit(s0, s1)
 
     @numba.njit(parallel=False)
-    def random_integer_base_states_from_seeds_cpu_njit(seeds: np.ndarray)-> tuple[np.ndarray,np.ndarray]:
+    def random_integers_base_states_matrix_cpu_njit(seeds: np.ndarray)-> tuple[np.ndarray,np.ndarray]:
         splitmix_states     = seeds
-        s0, splitmix_states = splitmix64_from_states_cpu_njit(splitmix_states)
-        s1, splitmix_states = splitmix64_from_states_cpu_njit(splitmix_states)
+        s0, splitmix_states = splitmix64_matrix_cpu_njit(splitmix_states)
+        s1, splitmix_states = splitmix64_matrix_cpu_njit(splitmix_states)
         return s0, s1
 
     @numba.njit(parallel=False)
@@ -78,7 +106,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def splitmix64_from_states_cpu_njit(states: np.ndarray) -> tuple[np.ndarray,np.ndarray]:
+    def splitmix64_matrix_cpu_njit(states: np.ndarray) -> tuple[np.ndarray,np.ndarray]:
         states += np.uint64(0x9E3779B97F4A7C15)
         z = states
         z = (z ^ (z >> np.uint64(30))) * np.uint64(0xBF58476D1CE4E5B9)

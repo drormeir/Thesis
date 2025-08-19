@@ -5,7 +5,7 @@ def random_integers_matrix_py(num_steps: np.uint32,\
                               out: np.ndarray) -> None:
     assert out.dtype == np.uint64, f'{out.dtype=}'
     row_column_scramble_seeds_py(offset_row0=offset_row0, offset_col0=offset_col0, seeds=out)
-    s0, s1 = random_integer_base_states_from_seeds_py(seeds=out)
+    s0, s1 = random_integers_base_states_matrix_py(seeds=out)
     for _ in range(num_steps):
         s0, s1 = random_integer_states_transition_from_states_py(s0=s0, s1=s1)
     random_integer_result_from_states_py(s0=s0, s1=s1, result=out)
@@ -29,10 +29,13 @@ def random_integers_series_py(seed: np.uint64, out: np.ndarray) -> None:
         s0, s1 = random_integer_states_transition_py(s0=s0, s1=s1)
         out[i] = random_integer_result_py(s0=s0, s1=s1)
 
-def random_integer_base_states_from_seeds_py(seeds: np.ndarray)-> tuple[np.ndarray,np.ndarray]:
+def random_integers_2_p_values_py(integers: np.ndarray, p_values: np.ndarray) -> None: # type: ignore
+    p_values[:] = (integers + np.float64(0.5))/np.float64(2.0**64)
+
+def random_integers_base_states_matrix_py(seeds: np.ndarray)-> tuple[np.ndarray,np.ndarray]:
     splitmix_states     = seeds
-    s0, splitmix_states = splitmix64_from_states_py(splitmix_states)
-    s1, splitmix_states = splitmix64_from_states_py(splitmix_states)
+    s0, splitmix_states = splitmix64_matrix_py(splitmix_states)
+    s1, splitmix_states = splitmix64_matrix_py(splitmix_states)
     return s0, s1
 
 def random_integer_base_states_py(seed: np.uint64)-> tuple[np.uint64,np.uint64]:
@@ -63,7 +66,7 @@ def random_integer_result_py(s0: np.uint64, s1: np.uint64) -> np.uint64:
         result64 = rotl64_py(s0 + s1, np.uint64(17)) + s0
     return result64
 
-def splitmix64_from_states_py(states: np.ndarray) -> tuple[np.ndarray,np.ndarray]:
+def splitmix64_matrix_py(states: np.ndarray) -> tuple[np.ndarray,np.ndarray]:
     with np.errstate(over='ignore'):  # Suppress overflow warnings
         states += np.uint64(0x9E3779B97F4A7C15)
         z = states
