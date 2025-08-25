@@ -10,36 +10,34 @@ def matrix(num_steps: np.uint32,\
     with np.errstate(over='ignore'):
         out[:] = (row_seeds << np.uint64(32)) + col_seeds
 
-    matrix_scramble_seeds(out)
     s0, s1 = matrix_base_states(out)
     for _ in range(num_steps):
         s0, s1 = matrix_states_transition(s0=s0, s1=s1)
     matrix_result(s0=s0, s1=s1, result=out)
 
-
-def series_p_values(seed: np.uint64, out: np.ndarray) -> None:
-    work_array = np.empty_like(out, dtype=np.uint64)
-    series(seed=seed, out=work_array)
-    matrix_2_p_values(work_array, out)
-
 def series(seed: np.uint64, out: np.ndarray) -> None:
-    seed = scramble_seed(seed=seed)
     s0, s1 = integer_base_states(seed=seed)
     num_steps = out.size
     for i in range(num_steps):
         s0, s1 = integer_states_transition(s0=s0, s1=s1)
         out[i] = integer_result(s0=s0, s1=s1)
 
-def matrix_2_p_values(integers: np.ndarray, p_values: np.ndarray) -> None: # type: ignore
-    p_values[:] = (integers + np.float64(0.5))/np.float64(2.0**64)
+def integer_from_seed(seed: np.uint64, num_steps: np.uint32) -> np.uint64:
+    s0, s1 = integer_base_states(seed=seed)
+    for _ in range(num_steps):
+        s0, s1 = integer_states_transition(s0=s0, s1=s1)
+    result64 = integer_result(s0=s0, s1=s1)
+    return result64
 
 def matrix_base_states(seeds: np.ndarray)-> tuple[np.ndarray,np.ndarray]:
+    matrix_scramble_seeds(seeds)
     splitmix_states     = seeds
     s0, splitmix_states = matrix_splitmix64(splitmix_states)
     s1, splitmix_states = matrix_splitmix64(splitmix_states)
     return s0, s1
 
 def integer_base_states(seed: np.uint64)-> tuple[np.uint64,np.uint64]:
+    seed = scramble_seed(seed=seed)
     splitmix_state     = seed
     s0, splitmix_state = splitmix64(splitmix_state)
     s1, splitmix_state = splitmix64(splitmix_state)

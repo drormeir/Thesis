@@ -1,3 +1,4 @@
+import numpy as np
 from python.hpc import globals
 
 if not globals.cuda_available:
@@ -7,28 +8,25 @@ if not globals.cuda_available:
         raise_cuda_not_available()
     def series(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
+    def integer_from_seed(**kwargs) -> np.uint64: # type: ignore
+        raise_cuda_not_available()
     def matrix_splitmix64(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
     def matrix_base_states(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def matrix_2_p_values(**kwargs) -> None: # type: ignore
+    def integer_base_states(**kwargs) -> tuple[np.uint64,np.uint64]: # type: ignore
         raise_cuda_not_available()
-    def calc_from_seed(**kwargs) -> None: # type: ignore
+    def integer_states_transition(**kwargs) -> tuple[np.uint64,np.uint64]: # type: ignore
         raise_cuda_not_available()
-    def integer_base_states(**kwargs) -> None: # type: ignore
+    def integer_result(**kwargs) -> np.uint64: # type: ignore
         raise_cuda_not_available()
-    def integer_states_transition(**kwargs) -> None: # type: ignore
+    def splitmix64(**kwargs) -> tuple[np.uint64,np.uint64]: # type: ignore
         raise_cuda_not_available()
-    def integer_result(**kwargs) -> None: # type: ignore
+    def rotl64(**kwargs) -> np.uint64: # type: ignore
         raise_cuda_not_available()
-    def splitmix64(**kwargs) -> None: # type: ignore
-        raise_cuda_not_available()
-    def rotl64(**kwargs) -> None: # type: ignore
-        raise_cuda_not_available()
-    def scramble_seed(**kwargs) -> None: # type: ignore
+    def scramble_seed(**kwargs) -> np.uint64: # type: ignore
         raise_cuda_not_available()
 else:
-    import numpy as np
     import numba
     import numba.cuda
     from numba.cuda.cudadrv.devicearray import DeviceNDArray
@@ -43,8 +41,26 @@ else:
             out_row = out[ind_row]
             seed_row = (np.uint64(offset_row0 + ind_row) << np.uint64(32)) + offset_col0
             for ind_col in range(ind_col0, out.shape[1], col_stride):
-                out_row[ind_col] = calc_from_seed(seed_row + np.uint64(ind_col), num_steps)
+                out_row[ind_col] = integer_from_seed(seed_row + np.uint64(ind_col), num_steps)
     
+    @numba.cuda.jit(device=False)
+    def series(seed: np.uint64, out: DeviceNDArray):
+        s0, s1 = integer_base_states(seed)
+        num_steps = out.size
+        ind_start = numba.cuda.grid(1) # type: ignore
+        ind_stride = numba.cuda.gridsize(1) # type: ignore
+        for i in range(ind_start, num_steps, ind_stride):
+            s0, s1 = integer_states_transition(s0, s1)
+            out[i] = integer_result(s0, s1)
+    
+    @numba.cuda.jit(device=True)
+    def integer_from_seed(seed: np.uint64, num_steps: np.uint32) -> np.uint64:
+        s0, s1 = integer_base_states(seed)
+        for _ in range(num_steps):
+            s0, s1 = integer_states_transition(s0, s1)
+        result64 = integer_result(s0, s1)
+        return result64
+
     @numba.cuda.jit(device=False)
     def matrix_splitmix64(states: DeviceNDArray, new_states: DeviceNDArray, z: DeviceNDArray):
         # Get the 2D indices of the current thread within the grid
@@ -71,29 +87,9 @@ else:
             for ind_col in range(ind_col0, seeds.shape[1], col_stride):
                 s0_row[ind_col], s1_row[ind_col] = integer_base_states(seeds_row[ind_col])
 
-    @numba.cuda.jit(device=False)
-    def series(seed: np.uint64, out: DeviceNDArray):
-        seed = scramble_seed(seed)
-        s0, s1 = integer_base_states(seed)
-        num_steps = out.size
-        ind_start = numba.cuda.grid(1) # type: ignore
-        ind_stride = numba.cuda.gridsize(1) # type: ignore
-        for i in range(ind_start, num_steps, ind_stride):
-            s0, s1 = integer_states_transition(s0, s1)
-            out[i] = integer_result(s0, s1)
-
-                
-    @numba.cuda.jit(device=True)
-    def calc_from_seed(seed: np.uint64, num_steps: np.uint32) -> np.uint64:
-        seed = scramble_seed(seed)
-        s0, s1 = integer_base_states(seed)
-        for _ in range(num_steps):
-            s0, s1 = integer_states_transition(s0, s1)
-        result64 = integer_result(s0, s1)
-        return result64
-    
     @numba.cuda.jit(device=True)
     def integer_base_states(seed: np.uint64) -> tuple[np.uint64,np.uint64]:
+        seed = scramble_seed(seed)
         splitmix_state     = seed
         s0, splitmix_state = splitmix64(splitmix_state)
         s1, splitmix_state = splitmix64(splitmix_state)
@@ -136,16 +132,3 @@ else:
         seed ^= (seed >> np.uint64(33))
         return seed
 
-    @numba.cuda.jit(device=False)
-    def matrix_2_p_values(integers: DeviceNDArray, p_values: DeviceNDArray) -> None: # type: ignore
-        norm_factor = np.float64(1.0) / np.float64(2.0**64)
-        # Get the 2D indices of the current thread within the grid
-        ind_row0, ind_col0 = numba.cuda.grid(2) # type: ignore
-        # Calculate the strides
-        row_stride, col_stride = numba.cuda.gridsize(2) # type: ignore
-        for ind_row in range(ind_row0, p_values.shape[0], row_stride):
-            out_row = p_values[ind_row]
-            inp_row = integers[ind_row]
-            for ind_col in range(ind_col0, p_values.shape[1], col_stride):
-                out_row[ind_col] = (inp_row[ind_col] + np.float64(0.5)) * norm_factor
-        

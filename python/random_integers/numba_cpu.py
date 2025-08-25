@@ -1,3 +1,4 @@
+import numpy as np
 from python.hpc import globals
 
 if not globals.cpu_njit_num_threads:
@@ -7,7 +8,7 @@ if not globals.cpu_njit_num_threads:
         raise_njit_not_available()
     def series(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def matrix_2_p_values(**kwargs) -> None: # type: ignore
+    def integer_from_seed(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
     def matrix_splitmix64(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
@@ -35,37 +36,23 @@ if not globals.cpu_njit_num_threads:
         raise_njit_not_available()
     def scramble_seed(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def matrix_2_p_values(**kwargs) -> None: # type: ignore
-        raise_njit_not_available()
 else:
-    import numpy as np
     import numba
 
     @numba.njit(parallel=False)
     def matrix(num_steps: np.uint32, offset_row0: np.uint32, offset_col0: np.uint32, out: np.ndarray) -> None:
+        # Combine row and col into a single 64-bit integer
         row_seeds = np.arange(offset_row0, offset_row0 + out.shape[0], dtype=np.uint64).reshape(-1,1)
         col_seeds = np.arange(offset_col0, offset_col0 + out.shape[1], dtype=np.uint64).reshape(1,-1)
-        # Combine row and col into a single 64-bit integer
         out[:] = (row_seeds << np.uint64(32)) + col_seeds
 
-        matrix_scramble_seeds(out)
-        s0, s1 = matrix_base_states(out)
+        s0, s1 = matrix_base_states(seeds=out)
         for _ in range(num_steps):
             s0, s1 = matrix_states_transition(s0=s0, s1=s1)
         matrix_result(s0=s0, s1=s1, result=out)
 
     @numba.njit(parallel=False)
-    def integer(seed: np.uint64, num_steps: np.uint32) -> np.uint64:
-        seed = scramble_seed(seed=seed)
-        s0, s1 = integer_base_states(seed=seed)
-        for _ in range(num_steps):
-            s0, s1 = integer_states_transition(s0=s0, s1=s1)
-        result64 = integer_result(s0=s0, s1=s1)
-        return result64
-
-    @numba.njit(parallel=False)
     def series(seed: np.uint64, out: np.ndarray) -> None:
-        seed = scramble_seed(seed=seed)
         s0, s1 = integer_base_states(seed=seed)
         num_steps = out.size
         for i in range(num_steps):
@@ -73,14 +60,25 @@ else:
             out[i] = integer_result(s0, s1)
 
     @numba.njit(parallel=False)
+    def integer_from_seed(seed: np.uint64, num_steps: np.uint32) -> np.uint64:
+        s0, s1 = integer_base_states(seed=seed)
+        for _ in range(num_steps):
+            s0, s1 = integer_states_transition(s0=s0, s1=s1)
+        result64 = integer_result(s0=s0, s1=s1)
+        return result64
+
+    @numba.njit(parallel=False)
     def matrix_base_states(seeds: np.ndarray)-> tuple[np.ndarray,np.ndarray]:
+        matrix_scramble_seeds(seeds)
         splitmix_states     = seeds
         s0, splitmix_states = matrix_splitmix64(splitmix_states)
         s1, splitmix_states = matrix_splitmix64(splitmix_states)
         return s0, s1
 
+
     @numba.njit(parallel=False)
     def integer_base_states(seed: np.uint64)-> tuple[np.uint64,np.uint64]:
+        seed = scramble_seed(seed=seed)
         splitmix_state     = seed
         s0, splitmix_state = splitmix64(splitmix_state)
         s1, splitmix_state = splitmix64(splitmix_state)
@@ -162,7 +160,3 @@ else:
         seed ^= (seed >> np.uint64(33))
         return seed
     
-    @numba.njit(parallel=True)
-    def matrix_2_p_values(integers: np.ndarray, p_values: np.ndarray) -> None: # type: ignore
-        p_values[:] = (integers + np.float64(0.5))/np.float64(2.0**64)
-        

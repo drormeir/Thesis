@@ -97,17 +97,3 @@ def series(data: HybridArray, seed: int|np.uint64, **kwargs) -> None:
         else:
             python_native.series(seed=seed, out=data.data)
 
-
-def matrix_2_p_values(integers: HybridArray, p_values: HybridArray, **kwargs) -> None:
-    assert integers.dtype() == np.uint64, f'{integers.dtype()=}'
-    p_values.realloc(like=integers, dtype=np.float64)
-    if integers.is_gpu():
-        # GPU mode
-        grid_shape, block_shape = integers.gpu_grid_block2D_square_shapes()
-        numba_gpu.matrix_2_p_values[grid_shape, block_shape](integers.gpu_data(), p_values.gpu_data()) # type: ignore
-    else:
-        # CPU mode
-        if is_use_njit(**kwargs):
-            numba_cpu.matrix_2_p_values(integers.numpy(), p_values.numpy())
-        else:
-            python_native.matrix_2_p_values(integers.numpy(), p_values.numpy())
