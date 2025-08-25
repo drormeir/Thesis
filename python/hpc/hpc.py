@@ -237,6 +237,44 @@ try:
 except ImportError as e:
     print(f"Could not import Numba.\n{e}", flush=True)
 
+def ensure_cuda_available_or_explain():
+    import os, sys, ctypes, pathlib, subprocess, textwrap
+    try:
+        from numba import cuda
+    except Exception as e:
+        raise RuntimeError("Numba CUDA import failed. Try: pip install -U numba numba-cuda cuda-python\n"
+                           f"Import error: {e}") from e
+    if cuda.is_available():
+        return
+    msgs = []
+    for lib in ("libcuda.so.1", "libcuda.so"):
+        try:
+            ctypes.CDLL(lib); msgs.append(f"Loaded {lib}")
+            break
+        except OSError as e:
+            msgs.append(f"Failed to load {lib}: {e}")
+    devs = ["/dev/nvidia0","/dev/nvidiactl","/dev/nvidia-uvm","/dev/nvidia-uvm-tools"]
+    missing = [d for d in devs if not pathlib.Path(d).exists()]
+    if missing:
+        msgs.append("Missing device nodes: " + ", ".join(missing))
+    try:
+        dmesg = subprocess.run(["dmesg"], capture_output=True, text=True, timeout=1).stdout.lower().splitlines()
+        tail = [ln for ln in dmesg if any(k in ln for k in ("nvidia","uvm","xid","rm","modeset"))][-20:]
+        if tail:
+            msgs.append("Kernel messages:\n" + "\n".join(tail))
+    except Exception:
+        pass
+    hints = [
+        "Restart services: sudo systemctl restart nvidia-persistenced",
+        "Reload UVM: sudo rmmod nvidia_uvm || true && sudo modprobe nvidia_uvm",
+        "If nodes missing: sudo apt install -y nvidia-modprobe && sudo nvidia-modprobe -u -c=0",
+        "Optional: pip install -U numba-cuda cuda-python for newer CUDA support."
+    ]
+    raise RuntimeError("CUDA isn’t available (driver init failed).\n\nDiagnostics:\n  "
+                       + "\n  ".join(msgs or ["<none>"])
+                       + "\n\nHow to fix:\n  " + "\n  ".join(hints))
+
+
 if globals.cuda_import_success is None:
     globals.cuda_import_success = False
     if globals.numba_import_success:
@@ -245,8 +283,7 @@ if globals.cuda_import_success is None:
             from numba.cuda.cudadrv.devicearray import DeviceNDArray
             from numba.core.errors import NumbaPerformanceWarning
             from numba.cuda.cudadrv.error import CudaSupportError
-            if not numba.cuda.is_available():
-                raise Exception('CUDA libraries are installed but this system does not supports CUDA operations.')
+            ensure_cuda_available_or_explain()
             globals.cuda_import_success = True
             print('import numba.cuda --> SUCCESS!', flush=True)
         except ImportError as e:
