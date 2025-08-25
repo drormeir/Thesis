@@ -1,11 +1,11 @@
 import numpy as np
 from tqdm import tqdm
-from python.hpc import use_njit, HybridArray
+from python.hpc import is_use_njit, HybridArray
 from python.rare_weak_model.python_native import random_p_values_matrix_py, random_p_values_series_py, random_modified_p_values_matrix_py, modify_p_values_matrix_py, sort_and_count_labels_rows_py
 from python.rare_weak_model.numba_cpu import random_p_values_matrix_cpu_njit, random_p_values_series_cpu_njit, random_modified_p_values_matrix_cpu_njit, modify_p_values_matrix_cpu_njit, sort_and_count_labels_rows_cpu_njit
 from python.rare_weak_model.numba_gpu import random_p_values_matrix_gpu, random_p_values_series_gpu, random_modified_p_values_matrix_gpu, modify_p_values_matrix_gpu, sort_and_count_labels_rows_gpu
-from python.random_integers.random_integers import random_num_steps
-from python.array_math_utils.array_math_utils import sort_rows_inplace
+from python.random_integers import random_num_steps
+from python.array_math_utils import sort_rows_inplace
 
 def test_speed_rare_weak_null_hypothesis(\
         N: int,\
@@ -13,7 +13,7 @@ def test_speed_rare_weak_null_hypothesis(\
         num_executions: int,\
         use_gpu: bool|None=None,\
         **kwargs) -> None:
-    is_njit = use_njit(**kwargs)
+    is_njit = is_use_njit(**kwargs)
     desc = f'Test Speed rare_weak_null_hypothesis {use_gpu=} use_njit={is_njit}'
     with HybridArray().realloc(shape=(num_monte,N), dtype=np.float64, use_gpu=use_gpu) as noise:
         for ind_execution in tqdm(range(num_executions), desc=desc, unit="step"):
@@ -70,7 +70,7 @@ def sort_and_count_labels_rows(\
                                        counts=cumulative_counts_output.gpu_data())
     else:
         # CPU mode
-        if use_njit(**kwargs):
+        if is_use_njit(**kwargs):
             sort_and_count_labels_rows_cpu_njit(data=sorted_p_values_inoutput.numpy(), n1=n1,\
                                                 counts=cumulative_counts_output.numpy())
         else:
@@ -95,7 +95,7 @@ def random_modified_p_values_matrix(\
         random_modified_p_values_matrix_gpu[grid_shape, block_shape](num_steps, offset_row0, offset_col0, mu, p_values_output.gpu_data()) # type: ignore
     else:
         # CPU mode
-        if use_njit(**kwargs):
+        if is_use_njit(**kwargs):
             random_modified_p_values_matrix_cpu_njit(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, mu=mu, out=p_values_output.numpy())
         else:
             random_modified_p_values_matrix_py(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, mu=mu, out=p_values_output.numpy())
@@ -120,7 +120,7 @@ def modify_p_values_submatrix(\
         modify_p_values_matrix_gpu[grid_shape, block_shape](data.gpu_data(), mu) # type: ignore
     else:
         # CPU mode
-        if use_njit(**kwargs):
+        if is_use_njit(**kwargs):
             modify_p_values_matrix_cpu_njit(out=data.numpy(), mu=mu)
         else:
             modify_p_values_matrix_py(out=data.numpy(), mu=mu)
@@ -142,7 +142,7 @@ def random_p_values_matrix(p_values_output: HybridArray,\
         random_p_values_matrix_gpu[grid_shape, block_shape](num_steps, offset_row0, offset_col0, p_values_output.gpu_data()) # type: ignore
     else:
         # CPU mode
-        if use_njit(**kwargs):
+        if is_use_njit(**kwargs):
             random_p_values_matrix_cpu_njit(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=p_values_output.numpy())
         else:
             random_p_values_matrix_py(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=p_values_output.numpy())
@@ -157,7 +157,7 @@ def random_p_values_series(p_values_output: HybridArray, seed: int|np.uint64, **
         random_p_values_series_gpu[1, 1](seed, p_values_output.gpu_data()) # type: ignore
     else:
         # CPU mode
-        if use_njit(**kwargs):
+        if is_use_njit(**kwargs):
             random_p_values_series_cpu_njit(seed=seed, out=p_values_output.numpy())
         else:
             random_p_values_series_py(seed=seed, out=p_values_output.numpy())

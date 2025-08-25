@@ -1,4 +1,4 @@
-from python.hpc import globals
+from python.hpc import globals, raise_njit_not_available
 
 if not globals.cpu_njit_num_threads:
     # Mock API
@@ -17,7 +17,7 @@ else:
     import numpy as np
     import math
     import numba
-    from python.random_integers.numba_cpu import random_integers_matrix_cpu_njit, random_integer_base_states_cpu_njit, random_integer_states_transition_cpu_njit, random_integer_result_cpu_njit
+    from python.random_integers import cpu as random_integers
 
     @numba.njit(parallel=True)
     def sort_and_count_labels_rows_cpu_njit(data: np.ndarray, n1: np.uint32, counts: np.ndarray) -> None:
@@ -47,19 +47,15 @@ else:
 
     @numba.njit(parallel=True)
     def random_p_values_matrix_cpu_njit(num_steps: np.uint32, offset_row0: np.uint32, offset_col0: np.uint32, out: np.ndarray) -> None:
-        out_uint64 = np.empty_like(out, dtype=np.uint64)
-        random_integers_matrix_cpu_njit(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=out_uint64)
-        out[:] = (out_uint64+np.float64(0.5)) / np.float64(2.0**64)
+        work_array = np.empty_like(out, dtype=np.uint64)
+        random_integers.random_integers_matrix(num_steps=num_steps, offset_row0=offset_row0, offset_col0=offset_col0, out=work_array)
+        random_integers.random_integers_2_p_values(integers=work_array, p_values=out)
 
     @numba.njit(parallel=False)
     def random_p_values_series_cpu_njit(seed: np.uint64, out: np.ndarray) -> None:
-        norm_factor = np.float64(1.0) / np.float64(2.0**64)
-        s0, s1 = random_integer_base_states_cpu_njit(seed=seed)
-        num_steps = out.size
-        for i in range(num_steps):
-            s0, s1 = random_integer_states_transition_cpu_njit(s0, s1)
-            rand_int = random_integer_result_cpu_njit(s0, s1)
-            out[i] = (rand_int + np.float64(0.5)) * norm_factor
+        work_array = np.empty_like(out, dtype=np.uint64)
+        random_integers.random_integers_series(seed=seed, out=work_array)
+        random_integers.random_integers_2_p_values(integers=work_array, p_values=out)
 
     @numba.njit(parallel=False)
     def standard_normal_isf_newton_cpu_njit(p: np.float64) -> np.float64:

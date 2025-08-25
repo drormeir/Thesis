@@ -21,7 +21,7 @@ else:
     import numba
     import numba.cuda
     from numba.cuda.cudadrv.devicearray import DeviceNDArray
-    from python.random_integers.numba_gpu import random_integer_gpu, random_integer_base_states_gpu, random_integer_states_transition_gpu, random_integer_result_gpu
+    from python.random_integers import gpu as random_integers
     import cupy
 
     def sort_and_count_labels_rows_gpu(data: DeviceNDArray, n1: np.uint32, counts: DeviceNDArray) -> None:
@@ -42,7 +42,7 @@ else:
             out_row = out[ind_row]
             seed_row = (np.uint64(offset_row0 + ind_row) << np.uint64(32)) + offset_col0
             for ind_col in range(ind_col0, out.shape[1], col_stride):
-                rand_int = random_integer_gpu(seed_row + np.uint64(ind_col), num_steps)
+                rand_int = random_integers.random_integer(seed_row + np.uint64(ind_col), num_steps)
                 p_value = (rand_int + np.float64(0.5)) * norm_factor
                 isf = standard_normal_isf_newton_gpu(p_value)
                 out_row[ind_col] = standard_normal_sf_gpu(isf + mu)
@@ -70,19 +70,19 @@ else:
             out_row = out[ind_row]
             seed_row = (np.uint64(offset_row0 + ind_row) << np.uint64(32)) + offset_col0
             for ind_col in range(ind_col0, out.shape[1], col_stride):
-                rand_int = random_integer_gpu(seed_row + np.uint64(ind_col), num_steps)
+                rand_int = random_integers.random_integer(seed_row + np.uint64(ind_col), num_steps)
                 out_row[ind_col] = (rand_int + np.float64(0.5)) * norm_factor
 
     @numba.cuda.jit(device=False)
     def random_p_values_series_gpu(seed: np.uint64, out: DeviceNDArray) -> None:
         norm_factor = np.float64(1.0) / np.float64(2.0**64)
-        s0, s1 = random_integer_base_states_gpu(seed)
+        s0, s1 = random_integers.random_integer_base_states(seed)
         num_steps = out.size
         ind_start = numba.cuda.grid(1) # type: ignore
         ind_stride = numba.cuda.gridsize(1) # type: ignore
         for i in range(ind_start, num_steps, ind_stride):
-            s0, s1 = random_integer_states_transition_gpu(s0, s1)
-            rand_int = random_integer_result_gpu(s0, s1)
+            s0, s1 = random_integers.random_integer_states_transition(s0, s1)
+            rand_int = random_integers.random_integer_result(s0, s1)
             out[i] = (rand_int + np.float64(0.5)) * norm_factor
 
 
