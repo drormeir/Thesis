@@ -3,37 +3,37 @@ from python.hpc import globals
 if not globals.cuda_available:
     # Mock API
     from python.hpc import raise_cuda_not_available
-    def array_transpose_gpu(**kwargs) -> None: # type: ignore
+    def array_transpose(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def average_row_gpu(**kwargs) -> None: # type: ignore
+    def average_row(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def average_column_gpu(**kwargs) -> None: # type: ignore
+    def average_column(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def sort_rows_inplace_gpu(**kwargs) -> None: # type: ignore
+    def sort_rows_inplace(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def cumulative_argmin_gpu(**kwargs) -> None: # type: ignore
+    def cumulative_argmin(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def cumulative_argmax_gpu(**kwargs) -> None: # type: ignore
+    def cumulative_argmax(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def cumulative_min_inplace_gpu(**kwargs) -> None: # type: ignore
+    def cumulative_min_inplace(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def cumulative_max_inplace_gpu(**kwargs) -> None: # type: ignore
+    def cumulative_max_inplace(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def cumulative_dominant_argmin_gpu(**kwargs) -> None: # type: ignore
+    def cumulative_dominant_argmin(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def cumulative_dominant_argmax_gpu(**kwargs) -> None: # type: ignore
+    def cumulative_dominant_argmax(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def cumulative_dominant_min_inplace_gpu(**kwargs) -> None: # type: ignore
+    def cumulative_dominant_min_inplace(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def cumulative_dominant_max_inplace_gpu(**kwargs) -> None: # type: ignore
+    def cumulative_dominant_max_inplace(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def max_column_along_rows_gpu(**kwargs) -> None: # type: ignore
+    def max_column_along_rows(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def argmax_column_along_rows_gpu(**kwargs) -> None: # type: ignore
+    def argmax_column_along_rows(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def min_column_along_rows_gpu(**kwargs) -> None: # type: ignore
+    def min_column_along_rows(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def argmin_column_along_rows_gpu(**kwargs) -> None: # type: ignore
+    def argmin_column_along_rows(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
 else:
     import numpy as np
@@ -42,53 +42,53 @@ else:
     from numba.cuda.cudadrv.devicearray import DeviceNDArray
     import cupy
 
-    def array_transpose_gpu(array: DeviceNDArray, out: DeviceNDArray) -> None:
+    def array_transpose(array: DeviceNDArray, out: DeviceNDArray) -> None:
         cupy.asarray(out)[:] = cupy.asarray(array).T # cupy.ascontiguousarray(cupy_T)
 
-    def average_row_gpu(array: DeviceNDArray, out_row: DeviceNDArray) -> None:
+    def average_row(array: DeviceNDArray, out_row: DeviceNDArray) -> None:
         array_cupy = cupy.asarray(array)
         avg_cupy = cupy.asarray(out_row)
         cupy.mean(array_cupy, axis=0, keepdims=True, out=avg_cupy)
 
-    def average_column_gpu(array: DeviceNDArray, out_column: DeviceNDArray) -> None:
+    def average_column(array: DeviceNDArray, out_column: DeviceNDArray) -> None:
         array_cupy = cupy.asarray(array)
         avg_cupy = cupy.asarray(out_column)
         cupy.mean(array_cupy, axis=1, keepdims=True, out=avg_cupy)
 
 
-    def sort_rows_inplace_gpu(array: DeviceNDArray) -> None:
+    def sort_rows_inplace(array: DeviceNDArray) -> None:
         cupy.asarray(array).sort(axis=1)
 
 
-    def max_column_along_rows_gpu(array: DeviceNDArray, maxval: DeviceNDArray) -> None:
+    def max_column_along_rows(array: DeviceNDArray, maxval: DeviceNDArray) -> None:
         assert array.dtype == maxval.dtype
         array_cupy = cupy.asarray(array)
         maxval_cupy = cupy.asarray(maxval).reshape(-1)
         cupy.max(array_cupy, axis=1, out=maxval_cupy)
 
 
-    def argmax_column_along_rows_gpu(array: DeviceNDArray, argmax: DeviceNDArray) -> None:
+    def argmax_column_along_rows(array: DeviceNDArray, argmax: DeviceNDArray) -> None:
         assert argmax.dtype == np.uint32
         array_cupy = cupy.asarray(array)
         argmax_cupy = cupy.asarray(argmax).reshape(-1)
         cupy.argmax(array_cupy, axis=1, out=argmax_cupy)
 
 
-    def min_column_along_rows_gpu(array: DeviceNDArray, minval: DeviceNDArray) -> None:
+    def min_column_along_rows(array: DeviceNDArray, minval: DeviceNDArray) -> None:
         assert array.dtype == minval.dtype
         array_cupy = cupy.asarray(array)
         minval_cupy = cupy.asarray(minval).reshape(-1)
         cupy.min(array_cupy, axis=1, out=minval_cupy)
 
 
-    def argmin_column_along_rows_gpu(array: DeviceNDArray, argmin: DeviceNDArray) -> None:
+    def argmin_column_along_rows(array: DeviceNDArray, argmin: DeviceNDArray) -> None:
         assert argmin.dtype == np.uint32
         array_cupy = cupy.asarray(array)
         argmin_cupy = cupy.asarray(argmin).reshape(-1)
         cupy.argmin(array_cupy, axis=1, out=argmin_cupy)
 
     @numba.cuda.jit(device=False)
-    def cumulative_argmin_gpu(array: DeviceNDArray, argmin: DeviceNDArray) -> None:
+    def cumulative_argmin(array: DeviceNDArray, argmin: DeviceNDArray) -> None:
         # Get the 1D indices of the current thread within the grid
         ind_row0 = numba.cuda.grid(1) # type: ignore
         # Calculate the strides
@@ -109,7 +109,7 @@ else:
 
 
     @numba.cuda.jit(device=False)
-    def cumulative_argmax_gpu(array: DeviceNDArray, argmax: DeviceNDArray) -> None:
+    def cumulative_argmax(array: DeviceNDArray, argmax: DeviceNDArray) -> None:
         # Get the 1D indices of the current thread within the grid
         ind_row0 = numba.cuda.grid(1) # type: ignore
         # Calculate the strides
@@ -130,7 +130,7 @@ else:
 
 
     @numba.cuda.jit(device=False)
-    def cumulative_min_inplace_gpu(array: DeviceNDArray) -> None:
+    def cumulative_min_inplace(array: DeviceNDArray) -> None:
         # Get the 1D indices of the current thread within the grid
         ind_row0 = numba.cuda.grid(1) # type: ignore
         # Calculate the strides
@@ -147,7 +147,7 @@ else:
 
 
     @numba.cuda.jit(device=False)
-    def cumulative_max_inplace_gpu(array: DeviceNDArray) -> None:
+    def cumulative_max_inplace(array: DeviceNDArray) -> None:
         # Get the 1D indices of the current thread within the grid
         ind_row0 = numba.cuda.grid(1) # type: ignore
         # Calculate the strides
@@ -164,7 +164,7 @@ else:
 
 
     @numba.cuda.jit(device=False)
-    def cumulative_dominant_argmin_gpu(array: DeviceNDArray, argmin: DeviceNDArray) -> None:
+    def cumulative_dominant_argmin(array: DeviceNDArray, argmin: DeviceNDArray) -> None:
         # Get the 1D indices of the current thread within the grid
         ind_row0 = numba.cuda.grid(1) # type: ignore
         # Calculate the strides
@@ -191,7 +191,7 @@ else:
 
 
     @numba.cuda.jit(device=False)
-    def cumulative_dominant_argmax_gpu(array: DeviceNDArray, argmax: DeviceNDArray) -> None:
+    def cumulative_dominant_argmax(array: DeviceNDArray, argmax: DeviceNDArray) -> None:
         # Get the 1D indices of the current thread within the grid
         ind_row0 = numba.cuda.grid(1) # type: ignore
         # Calculate the strides
@@ -218,7 +218,7 @@ else:
 
 
     @numba.cuda.jit(device=False)
-    def cumulative_dominant_min_inplace_gpu(array: DeviceNDArray) -> None:
+    def cumulative_dominant_min_inplace(array: DeviceNDArray) -> None:
         # Get the 1D indices of the current thread within the grid
         ind_row0 = numba.cuda.grid(1) # type: ignore
         # Calculate the strides
@@ -242,7 +242,7 @@ else:
 
 
     @numba.cuda.jit(device=False)
-    def cumulative_dominant_max_inplace_gpu(array: DeviceNDArray) -> None:
+    def cumulative_dominant_max_inplace(array: DeviceNDArray) -> None:
         # Get the 1D indices of the current thread within the grid
         ind_row0 = numba.cuda.grid(1) # type: ignore
         # Calculate the strides

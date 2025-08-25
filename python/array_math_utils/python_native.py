@@ -1,6 +1,6 @@
 import numpy as np
 
-def cumulative_argmin_py(array: np.ndarray, argmin: np.ndarray) -> None:
+def cumulative_argmin(array: np.ndarray, argmin: np.ndarray) -> None:
     rows, cols = array.shape
     for ind_row in range(rows):
         input_row = array[ind_row]
@@ -16,7 +16,7 @@ def cumulative_argmin_py(array: np.ndarray, argmin: np.ndarray) -> None:
             output_row[j] = current_idx
 
 
-def cumulative_argmax_py(array: np.ndarray, argmax: np.ndarray) -> None:
+def cumulative_argmax(array: np.ndarray, argmax: np.ndarray) -> None:
     rows, cols = array.shape
     for ind_row in range(rows):
         input_row = array[ind_row]
@@ -32,7 +32,7 @@ def cumulative_argmax_py(array: np.ndarray, argmax: np.ndarray) -> None:
             output_row[j] = current_idx
 
 
-def cumulative_min_inplace_py(array: np.ndarray) -> None:
+def cumulative_min_inplace(array: np.ndarray) -> None:
     rows, cols = array.shape
     for ind_row in range(rows):
         row = array[ind_row]
@@ -44,7 +44,7 @@ def cumulative_min_inplace_py(array: np.ndarray) -> None:
             row[j] = current_min
 
 
-def cumulative_max_inplace_py(array: np.ndarray) -> None:
+def cumulative_max_inplace(array: np.ndarray) -> None:
     rows, cols = array.shape
     for ind_row in range(rows):
         row = array[ind_row]
@@ -56,7 +56,7 @@ def cumulative_max_inplace_py(array: np.ndarray) -> None:
             row[j] = current_max
 
 
-def cumulative_dominant_argmin_py(array: np.ndarray, argmin: np.ndarray) -> None:
+def cumulative_dominant_argmin(array: np.ndarray, argmin: np.ndarray) -> None:
     rows, cols = array.shape
     for ind_row in range(rows):
         input_row = array[ind_row]
@@ -78,7 +78,7 @@ def cumulative_dominant_argmin_py(array: np.ndarray, argmin: np.ndarray) -> None
             output_row[j] = current_ind_dominant
 
 
-def cumulative_dominant_argmax_py(array: np.ndarray, argmax: np.ndarray) -> None:
+def cumulative_dominant_argmax(array: np.ndarray, argmax: np.ndarray) -> None:
     rows, cols = array.shape
     for ind_row in range(rows):
         input_row = array[ind_row]
@@ -100,7 +100,7 @@ def cumulative_dominant_argmax_py(array: np.ndarray, argmax: np.ndarray) -> None
             output_row[j] = current_ind_dominant
 
 
-def cumulative_dominant_min_inplace_py(array: np.ndarray) -> None:
+def cumulative_dominant_min_inplace(array: np.ndarray) -> None:
     rows, cols = array.shape
     for ind_row in range(rows):
         row = array[ind_row]
@@ -119,7 +119,7 @@ def cumulative_dominant_min_inplace_py(array: np.ndarray) -> None:
             row[j] = current_dominant
 
 
-def cumulative_dominant_max_inplace_py(array: np.ndarray) -> None:
+def cumulative_dominant_max_inplace(array: np.ndarray) -> None:
     rows, cols = array.shape
     for ind_row in range(rows):
         row = array[ind_row]
@@ -138,30 +138,30 @@ def cumulative_dominant_max_inplace_py(array: np.ndarray) -> None:
             row[j] = current_dominant
 
 
-def max_column_along_rows_py(array: np.ndarray, maxval: np.ndarray) -> None:
+def max_column_along_rows(array: np.ndarray, maxval: np.ndarray) -> None:
     array.max(axis=1, out=maxval)
 
 
-def argmax_column_along_rows_py(array: np.ndarray, argmax: np.ndarray) -> None:
+def argmax_column_along_rows(array: np.ndarray, argmax: np.ndarray) -> None:
     array.argmax(axis=1, out=argmax)
 
 
-def min_column_along_rows_py(array: np.ndarray, minval: np.ndarray) -> None:
+def min_column_along_rows(array: np.ndarray, minval: np.ndarray) -> None:
     array.min(axis=1, out=minval)
 
 
-def argmin_column_along_rows_py(array: np.ndarray, argmin: np.ndarray) -> None:
+def argmin_column_along_rows(array: np.ndarray, argmin: np.ndarray) -> None:
     array.argmin(axis=1, out=argmin)
 
-def average_row_py(array: np.ndarray, out_row: np.ndarray) -> None:
+def average_row(array: np.ndarray, out_row: np.ndarray) -> None:
     np.mean(array, axis=0, keepdims=True, out=out_row)
 
 
-def average_column_py(array: np.ndarray, out_column: np.ndarray) -> None:
+def average_column(array: np.ndarray, out_column: np.ndarray) -> None:
     np.mean(array, axis=1, keepdims=True, out=out_column)
 
-def array_transpose_py(array: np.ndarray, out: np.ndarray) -> None:
+def array_transpose(array: np.ndarray, out: np.ndarray) -> None:
     out[:] = array.T
 
-def sort_rows_inplace_py(array: np.ndarray) -> None:
+def sort_rows_inplace(array: np.ndarray) -> None:
     array.sort(axis=1)

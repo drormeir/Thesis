@@ -4,35 +4,35 @@ cpu_njit_num_threads = globals.cpu_njit_num_threads # numba njit compatible
 if not cpu_njit_num_threads:
     # Mock API
     from python.hpc import raise_njit_not_available
-    def array_transpose_cpu_njit(**kwargs) -> None: # type: ignore
+    def array_transpose(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def average_row_cpu_njit(**kwargs) -> None: # type: ignore
+    def average_row(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def sort_rows_inplace_cpu_njit(**kwargs) -> None: # type: ignore
+    def sort_rows_inplace(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def cumulative_argmin_cpu_njit(**kwargs) -> None: # type: ignore
+    def cumulative_argmin(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def cumulative_argmax_cpu_njit(**kwargs) -> None: # type: ignore
+    def cumulative_argmax(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def cumulative_min_inplace_cpu_njit(**kwargs) -> None: # type: ignore
+    def cumulative_min_inplace(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def cumulative_max_inplace_cpu_njit(**kwargs) -> None: # type: ignore
+    def cumulative_max_inplace(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def cumulative_dominant_argmin_cpu_njit(**kwargs) -> None: # type: ignore
+    def cumulative_dominant_argmin(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def cumulative_dominant_argmax_cpu_njit(**kwargs) -> None: # type: ignore
+    def cumulative_dominant_argmax(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def cumulative_dominant_min_inplace_cpu_njit(**kwargs) -> None: # type: ignore
+    def cumulative_dominant_min_inplace(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def cumulative_dominant_max_inplace_cpu_njit(**kwargs) -> None: # type: ignore
+    def cumulative_dominant_max_inplace(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def max_column_along_rows_cpu_njit(**kwargs) -> None: # type: ignore
+    def max_column_along_rows(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def argmax_column_along_rows_cpu_njit(**kwargs) -> None: # type: ignore
+    def argmax_column_along_rows(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def min_column_along_rows_cpu_njit(**kwargs) -> None: # type: ignore
+    def min_column_along_rows(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def argmin_column_along_rows_cpu_njit(**kwargs) -> None: # type: ignore
+    def argmin_column_along_rows(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
 else:
     import numpy as np
@@ -40,7 +40,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def array_transpose_cpu_njit(array: np.ndarray, out: np.ndarray) -> None:
+    def array_transpose(array: np.ndarray, out: np.ndarray) -> None:
         chunks_ranges = split2chunks(out.shape[0])
         for ind_chunck in numba.prange(chunks_ranges.shape[0]):
             begin, end = chunks_ranges[ind_chunck]
@@ -48,7 +48,7 @@ else:
     
 
     @numba.njit(parallel=True)
-    def average_row_cpu_njit(array: np.ndarray, out_row: np.ndarray) -> None:
+    def average_row(array: np.ndarray, out_row: np.ndarray) -> None:
         chunks_ranges = split2chunks(array.shape[1])
         for ind_chunck in numba.prange(chunks_ranges.shape[0]):
             begin, end = chunks_ranges[ind_chunck]
@@ -56,7 +56,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def average_column_cpu_njit(array: np.ndarray, out_column: np.ndarray) -> None:
+    def average_column(array: np.ndarray, out_column: np.ndarray) -> None:
         chunks_ranges = split2chunks(array.shape[0])
         for ind_chunck in numba.prange(chunks_ranges.shape[0]):
             begin, end = chunks_ranges[ind_chunck]
@@ -64,13 +64,13 @@ else:
 
 
     @numba.njit(parallel=True)
-    def sort_rows_inplace_cpu_njit(array: np.ndarray) -> None:
+    def sort_rows_inplace(array: np.ndarray) -> None:
         for ind_row in numba.prange(array.shape[0]):
             array[ind_row,:] = np.sort(array[ind_row])
 
 
     @numba.njit(parallel=True)
-    def cumulative_argmin_cpu_njit(array: np.ndarray, argmin: np.ndarray) -> None:
+    def cumulative_argmin(array: np.ndarray, argmin: np.ndarray) -> None:
         rows, cols = array.shape
         for ind_row in numba.prange(rows):
             input_row = array[ind_row]
@@ -87,7 +87,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def cumulative_argmax_cpu_njit(array: np.ndarray, argmax: np.ndarray) -> None:
+    def cumulative_argmax(array: np.ndarray, argmax: np.ndarray) -> None:
         rows, cols = array.shape
         for ind_row in numba.prange(rows):
             input_row = array[ind_row]
@@ -104,7 +104,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def cumulative_min_inplace_cpu_njit(array: np.ndarray) -> None:
+    def cumulative_min_inplace(array: np.ndarray) -> None:
         rows, cols = array.shape
         for ind_row in numba.prange(rows):
             row = array[ind_row]
@@ -117,7 +117,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def cumulative_max_inplace_cpu_njit(array: np.ndarray) -> None:
+    def cumulative_max_inplace(array: np.ndarray) -> None:
         rows, cols = array.shape
         for ind_row in numba.prange(rows):
             row = array[ind_row]
@@ -130,7 +130,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def cumulative_dominant_argmin_cpu_njit(array: np.ndarray, argmin: np.ndarray) -> None:
+    def cumulative_dominant_argmin(array: np.ndarray, argmin: np.ndarray) -> None:
         rows, cols = array.shape
         for ind_row in numba.prange(rows):
             input_row = array[ind_row]
@@ -153,7 +153,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def cumulative_dominant_argmax_cpu_njit(array: np.ndarray, argmax: np.ndarray) -> None:
+    def cumulative_dominant_argmax(array: np.ndarray, argmax: np.ndarray) -> None:
         rows, cols = array.shape
         for ind_row in numba.prange(rows):
             input_row = array[ind_row]
@@ -176,7 +176,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def cumulative_dominant_min_inplace_cpu_njit(array: np.ndarray) -> None:
+    def cumulative_dominant_min_inplace(array: np.ndarray) -> None:
         rows, cols = array.shape
         for ind_row in numba.prange(rows):
             row = array[ind_row]
@@ -196,7 +196,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def cumulative_dominant_max_inplace_cpu_njit(array: np.ndarray) -> None:
+    def cumulative_dominant_max_inplace(array: np.ndarray) -> None:
         rows, cols = array.shape
         for ind_row in numba.prange(rows):
             row = array[ind_row]
@@ -216,7 +216,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def max_column_along_rows_cpu_njit(array: np.ndarray, maxval: np.ndarray) -> None:
+    def max_column_along_rows(array: np.ndarray, maxval: np.ndarray) -> None:
         rows = array.shape[0]
         chunks_ranges = split2chunks(rows)
         for ind_chunck in numba.prange(chunks_ranges.shape[0]):
@@ -225,7 +225,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def argmax_column_along_rows_cpu_njit(array: np.ndarray, argmax: np.ndarray) -> None:
+    def argmax_column_along_rows(array: np.ndarray, argmax: np.ndarray) -> None:
         rows = array.shape[0]
         chunks_ranges = split2chunks(rows)
         for ind_chunck in numba.prange(chunks_ranges.shape[0]):
@@ -234,7 +234,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def min_column_along_rows_cpu_njit(array: np.ndarray, minval: np.ndarray) -> None:
+    def min_column_along_rows(array: np.ndarray, minval: np.ndarray) -> None:
         rows = array.shape[0]
         chunks_ranges = split2chunks(rows)
         for ind_chunck in numba.prange(chunks_ranges.shape[0]):
@@ -243,7 +243,7 @@ else:
 
 
     @numba.njit(parallel=True)
-    def argmin_column_along_rows_cpu_njit(array: np.ndarray, argmin: np.ndarray) -> None:
+    def argmin_column_along_rows(array: np.ndarray, argmin: np.ndarray) -> None:
         rows = array.shape[0]
         chunks_ranges = split2chunks(rows)
         for ind_chunck in numba.prange(chunks_ranges.shape[0]):

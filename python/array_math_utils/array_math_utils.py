@@ -1,18 +1,6 @@
 import numpy as np
 from python.hpc import is_use_njit, HybridArray
-
-from .numba_gpu import array_transpose_gpu, sort_rows_inplace_gpu, average_row_gpu, average_column_gpu, cumulative_argmin_gpu, cumulative_argmax_gpu,\
-    cumulative_min_inplace_gpu, cumulative_max_inplace_gpu,\
-    cumulative_dominant_argmin_gpu, cumulative_dominant_argmax_gpu, cumulative_dominant_min_inplace_gpu, cumulative_dominant_max_inplace_gpu,\
-    max_column_along_rows_gpu, min_column_along_rows_gpu, argmax_column_along_rows_gpu, argmin_column_along_rows_gpu
-from .numba_cpu import array_transpose_cpu_njit, average_row_cpu_njit, average_column_cpu_njit, sort_rows_inplace_cpu_njit,\
-    cumulative_argmin_cpu_njit, cumulative_argmax_cpu_njit, cumulative_min_inplace_cpu_njit, cumulative_max_inplace_cpu_njit,\
-    cumulative_dominant_argmin_cpu_njit, cumulative_dominant_argmax_cpu_njit, cumulative_dominant_min_inplace_cpu_njit, cumulative_dominant_max_inplace_cpu_njit,\
-    max_column_along_rows_cpu_njit, argmax_column_along_rows_cpu_njit, min_column_along_rows_cpu_njit, argmin_column_along_rows_cpu_njit
-from .python_native import cumulative_argmin_py, cumulative_argmax_py, cumulative_min_inplace_py, cumulative_max_inplace_py,\
-    cumulative_dominant_argmin_py, cumulative_dominant_argmax_py, cumulative_dominant_min_inplace_py, cumulative_dominant_max_inplace_py,\
-    max_column_along_rows_py, argmax_column_along_rows_py, min_column_along_rows_py, argmin_column_along_rows_py, average_row_py, average_column_py,\
-    array_transpose_py, sort_rows_inplace_py
+from python.array_math_utils import python_native, numba_cpu, numba_gpu
 
 def array_transpose_inplace(array: HybridArray, **kwargs) -> None:
     work = HybridArray()
@@ -27,50 +15,50 @@ def array_transpose(array: HybridArray, out: HybridArray, **kwargs) -> None:
     out.realloc(like=array, shape=array.shape()[::-1])    
     if array.is_gpu():
         # GPU mode
-        array_transpose_gpu(array=array.gpu_data(), out=out.gpu_data())
+        numba_gpu.array_transpose(array=array.gpu_data(), out=out.gpu_data())
     else:
         # CPU mode
         if is_use_njit(**kwargs):
-            array_transpose_cpu_njit(array=array.numpy(), out=out.numpy())
+            numba_cpu.array_transpose(array=array.numpy(), out=out.numpy())
         else:
-            array_transpose_py(array=array.numpy(), out=out.numpy())
+            python_native.array_transpose(array=array.numpy(), out=out.numpy())
 
 def average_row(array: HybridArray, out_row: HybridArray, **kwargs) -> None:
     assert array.dtype() == np.float64, f'{array.dtype()=}'
     out_row.realloc(like=array, shape=(1,array.ncols()))
     if array.is_gpu():
         # GPU mode
-        average_row_gpu(array=array.gpu_data(), out_row=out_row.gpu_data())
+        numba_gpu.average_row(array=array.gpu_data(), out_row=out_row.gpu_data())
     else:
         # CPU mode
         if is_use_njit(**kwargs):
-            average_row_cpu_njit(array=array.numpy(), out_row=out_row.numpy())
+            numba_cpu.average_row(array=array.numpy(), out_row=out_row.numpy())
         else:
-            average_row_py(array=array.numpy(), out_row=out_row.numpy())
+            python_native.average_row(array=array.numpy(), out_row=out_row.numpy())
 
 def average_column(array: HybridArray, out_column: HybridArray, **kwargs) -> None:
     assert array.dtype() == np.float64, f'{array.dtype()=}'
     out_column.realloc(like=array, shape=(array.nrows(),1))
     if array.is_gpu():
         # GPU mode
-        average_column_gpu(array=array.gpu_data(), out_column=out_column.gpu_data())
+        numba_gpu.average_column(array=array.gpu_data(), out_column=out_column.gpu_data())
     else:
         # CPU mode
         if is_use_njit(**kwargs):
-            average_column_cpu_njit(array=array.numpy(), out_column=out_column.numpy())
+            numba_cpu.average_column(array=array.numpy(), out_column=out_column.numpy())
         else:
-            average_column_py(array=array.numpy(), out_column=out_column.numpy())
+            python_native.average_column(array=array.numpy(), out_column=out_column.numpy())
 
 def sort_rows_inplace(array: HybridArray, **kwargs) -> None:
     assert array.dtype() == np.float64, f'{array.dtype()=}'
     if array.is_gpu():
-        sort_rows_inplace_gpu(array.gpu_data())
+        numba_gpu.sort_rows_inplace(array.gpu_data())
     else:
         # CPU mode
         if is_use_njit(**kwargs):
-            sort_rows_inplace_cpu_njit(array.numpy())
+            numba_cpu.sort_rows_inplace(array.numpy())
         else:
-            sort_rows_inplace_py(array.numpy())
+            python_native.sort_rows_inplace(array.numpy())
 
 
 def cumulative_argmin(array: HybridArray, argmin: HybridArray, **kwargs) -> None:
@@ -79,13 +67,13 @@ def cumulative_argmin(array: HybridArray, argmin: HybridArray, **kwargs) -> None
     if array.is_gpu():
         # GPU mode
         grid_shape, block_shape = array.gpu_grid_block1D_rows_shapes()
-        cumulative_argmin_gpu[grid_shape, block_shape](array.gpu_data(), argmin.gpu_data()) # type: ignore
+        numba_gpu.cumulative_argmin[grid_shape, block_shape](array.gpu_data(), argmin.gpu_data()) # type: ignore
     else:
         # CPU mode
         if is_use_njit(**kwargs):
-            cumulative_argmin_cpu_njit(array=array.numpy(), argmin=argmin.numpy())
+            numba_cpu.cumulative_argmin(array=array.numpy(), argmin=argmin.numpy())
         else:
-            cumulative_argmin_py(array=array.numpy(), argmin=argmin.numpy())
+            python_native.cumulative_argmin(array=array.numpy(), argmin=argmin.numpy())
 
 
 def cumulative_argmax(array: HybridArray, argmax: HybridArray, **kwargs) -> None:
@@ -94,13 +82,13 @@ def cumulative_argmax(array: HybridArray, argmax: HybridArray, **kwargs) -> None
     if array.is_gpu():
         # GPU mode
         grid_shape, block_shape = array.gpu_grid_block1D_rows_shapes()
-        cumulative_argmax_gpu[grid_shape, block_shape](array.gpu_data(), argmax.gpu_data()) # type: ignore
+        numba_gpu.cumulative_argmax[grid_shape, block_shape](array.gpu_data(), argmax.gpu_data()) # type: ignore
     else:
         # CPU mode
         if is_use_njit(**kwargs):
-            cumulative_argmax_cpu_njit(array=array.numpy(), argmax=argmax.numpy())
+            numba_cpu.cumulative_argmax(array=array.numpy(), argmax=argmax.numpy())
         else:
-            cumulative_argmax_py(array=array.numpy(), argmax=argmax.numpy())
+            python_native.cumulative_argmax(array=array.numpy(), argmax=argmax.numpy())
 
 
 def cumulative_min_inplace(array: HybridArray, **kwargs) -> None:
@@ -108,13 +96,13 @@ def cumulative_min_inplace(array: HybridArray, **kwargs) -> None:
     if array.is_gpu():
         # GPU mode
         grid_shape, block_shape = array.gpu_grid_block1D_rows_shapes()
-        cumulative_min_inplace_gpu[grid_shape, block_shape](array.gpu_data()) # type: ignore
+        numba_gpu.cumulative_min_inplace[grid_shape, block_shape](array.gpu_data()) # type: ignore
     else:
         # CPU mode
         if is_use_njit(**kwargs):
-            cumulative_min_inplace_cpu_njit(array=array.numpy())
+            numba_cpu.cumulative_min_inplace(array=array.numpy())
         else:
-            cumulative_min_inplace_py(array=array.numpy())
+            python_native.cumulative_min_inplace(array=array.numpy())
 
 
 def cumulative_max_inplace(array: HybridArray, **kwargs) -> None:
@@ -122,13 +110,13 @@ def cumulative_max_inplace(array: HybridArray, **kwargs) -> None:
     if array.is_gpu():
         # GPU mode
         grid_shape, block_shape = array.gpu_grid_block1D_rows_shapes()
-        cumulative_max_inplace_gpu[grid_shape, block_shape](array.gpu_data()) # type: ignore
+        numba_gpu.cumulative_max_inplace[grid_shape, block_shape](array.gpu_data()) # type: ignore
     else:
         # CPU mode
         if is_use_njit(**kwargs):
-            cumulative_max_inplace_cpu_njit(array=array.numpy())
+            numba_cpu.cumulative_max_inplace(array=array.numpy())
         else:
-            cumulative_max_inplace_py(array=array.numpy())
+            python_native.cumulative_max_inplace(array=array.numpy())
 
 
 def cumulative_dominant_argmin(array: HybridArray, argmin: HybridArray, **kwargs) -> None:
@@ -137,13 +125,13 @@ def cumulative_dominant_argmin(array: HybridArray, argmin: HybridArray, **kwargs
     if array.is_gpu():
         # GPU mode
         grid_shape, block_shape = array.gpu_grid_block1D_rows_shapes()
-        cumulative_dominant_argmin_gpu[grid_shape, block_shape](array.gpu_data(), argmin.gpu_data()) # type: ignore
+        numba_gpu.cumulative_dominant_argmin[grid_shape, block_shape](array.gpu_data(), argmin.gpu_data()) # type: ignore
     else:
         # CPU mode
         if is_use_njit(**kwargs):
-            cumulative_dominant_argmin_cpu_njit(array=array.numpy(), argmin=argmin.numpy())
+            numba_cpu.cumulative_dominant_argmin(array=array.numpy(), argmin=argmin.numpy())
         else:
-            cumulative_dominant_argmin_py(array=array.numpy(), argmin=argmin.numpy())
+            python_native.cumulative_dominant_argmin(array=array.numpy(), argmin=argmin.numpy())
 
 
 def cumulative_dominant_argmax(array: HybridArray, argmax: HybridArray, **kwargs) -> None:
@@ -152,13 +140,13 @@ def cumulative_dominant_argmax(array: HybridArray, argmax: HybridArray, **kwargs
     if array.is_gpu():
         # GPU mode
         grid_shape, block_shape = array.gpu_grid_block1D_rows_shapes()
-        cumulative_dominant_argmax_gpu[grid_shape, block_shape](array.gpu_data(), argmax.gpu_data()) # type: ignore
+        numba_gpu.cumulative_dominant_argmax[grid_shape, block_shape](array.gpu_data(), argmax.gpu_data()) # type: ignore
     else:
         # CPU mode
         if is_use_njit(**kwargs):
-            cumulative_dominant_argmax_cpu_njit(array=array.numpy(), argmax=argmax.numpy())
+            numba_cpu.cumulative_dominant_argmax(array=array.numpy(), argmax=argmax.numpy())
         else:
-            cumulative_dominant_argmax_py(array=array.numpy(), argmax=argmax.numpy())
+            python_native.cumulative_dominant_argmax(array=array.numpy(), argmax=argmax.numpy())
 
 
 def cumulative_dominant_min_inplace(array: HybridArray, **kwargs) -> None:
@@ -166,13 +154,13 @@ def cumulative_dominant_min_inplace(array: HybridArray, **kwargs) -> None:
     if array.is_gpu():
         # GPU mode
         grid_shape, block_shape = array.gpu_grid_block1D_rows_shapes()
-        cumulative_dominant_min_inplace_gpu[grid_shape, block_shape](array.gpu_data()) # type: ignore
+        numba_gpu.cumulative_dominant_min_inplace[grid_shape, block_shape](array.gpu_data()) # type: ignore
     else:
         # CPU mode
         if is_use_njit(**kwargs):
-            cumulative_dominant_min_inplace_cpu_njit(array=array.numpy())
+            numba_cpu.cumulative_dominant_min_inplace(array=array.numpy())
         else:
-            cumulative_dominant_min_inplace_py(array=array.numpy())
+            python_native.cumulative_dominant_min_inplace(array=array.numpy())
 
 
 def cumulative_dominant_max_inplace(array: HybridArray, **kwargs) -> None:
@@ -180,13 +168,13 @@ def cumulative_dominant_max_inplace(array: HybridArray, **kwargs) -> None:
     if array.is_gpu():
         # GPU mode
         grid_shape, block_shape = array.gpu_grid_block1D_rows_shapes()
-        cumulative_dominant_max_inplace_gpu[grid_shape, block_shape](array.gpu_data()) # type: ignore
+        numba_gpu.cumulative_dominant_max_inplace[grid_shape, block_shape](array.gpu_data()) # type: ignore
     else:
         # CPU mode
         if is_use_njit(**kwargs):
-            cumulative_dominant_max_inplace_cpu_njit(array=array.numpy())
+            numba_cpu.cumulative_dominant_max_inplace(array=array.numpy())
         else:
-            cumulative_dominant_max_inplace_py(array=array.numpy())
+            python_native.cumulative_dominant_max_inplace(array=array.numpy())
 
 
 def max_column_along_rows(array: HybridArray, maxval: HybridArray, **kwargs) -> None:
@@ -195,15 +183,15 @@ def max_column_along_rows(array: HybridArray, maxval: HybridArray, **kwargs) -> 
     maxval.realloc(like=array, shape=shape)
     if array.is_gpu():
         # GPU mode
-        max_column_along_rows_gpu(array=array.gpu_data(), maxval=maxval.gpu_data())
+        numba_gpu.max_column_along_rows(array=array.gpu_data(), maxval=maxval.gpu_data())
     else:
         # CPU mode
         array_numpy = array.numpy()
         maxval_numpy = maxval.numpy().reshape(-1)
         if is_use_njit(**kwargs):
-            max_column_along_rows_cpu_njit(array=array_numpy, maxval=maxval_numpy)
+            numba_cpu.max_column_along_rows(array=array_numpy, maxval=maxval_numpy)
         else:
-            max_column_along_rows_py(array=array_numpy, maxval=maxval_numpy)
+            python_native.max_column_along_rows(array=array_numpy, maxval=maxval_numpy)
 
 
 def argmax_column_along_rows(array: HybridArray, argmax: HybridArray, **kwargs) -> None:
@@ -212,15 +200,15 @@ def argmax_column_along_rows(array: HybridArray, argmax: HybridArray, **kwargs) 
     argmax.realloc(like=array, shape=shape, dtype=np.uint32)
     if array.is_gpu():
         # GPU mode
-        argmax_column_along_rows_gpu(array=array.gpu_data(), argmax=argmax.gpu_data())
+        numba_gpu.argmax_column_along_rows(array=array.gpu_data(), argmax=argmax.gpu_data())
     else:
         # CPU mode
         array_numpy = array.numpy()
         argmax_numpy = argmax.numpy().reshape(-1)
         if is_use_njit(**kwargs):
-            argmax_column_along_rows_cpu_njit(array=array_numpy, argmax=argmax_numpy)
+            numba_cpu.argmax_column_along_rows(array=array_numpy, argmax=argmax_numpy)
         else:
-            argmax_column_along_rows_py(array=array_numpy, argmax=argmax_numpy)
+            python_native.argmax_column_along_rows(array=array_numpy, argmax=argmax_numpy)
 
 
 def min_column_along_rows(array: HybridArray, minval: HybridArray, **kwargs) -> None:
@@ -229,15 +217,15 @@ def min_column_along_rows(array: HybridArray, minval: HybridArray, **kwargs) -> 
     minval.realloc(like=array, shape=shape)
     if array.is_gpu():
         # GPU mode
-        min_column_along_rows_gpu(array=array.gpu_data(), minval=minval.gpu_data())
+        numba_gpu.min_column_along_rows(array=array.gpu_data(), minval=minval.gpu_data())
     else:
         # CPU mode
         array_numpy = array.numpy()
         minval_numpy = minval.numpy().reshape(-1)
         if is_use_njit(**kwargs):
-            min_column_along_rows_cpu_njit(array=array_numpy, minval=minval_numpy)
+            numba_cpu.min_column_along_rows(array=array_numpy, minval=minval_numpy)
         else:
-            min_column_along_rows_py(array=array_numpy, minval=minval_numpy)
+            python_native.min_column_along_rows(array=array_numpy, minval=minval_numpy)
 
 
 def argmin_column_along_rows(array: HybridArray, argmin: HybridArray, **kwargs) -> None:
@@ -246,12 +234,12 @@ def argmin_column_along_rows(array: HybridArray, argmin: HybridArray, **kwargs) 
     argmin.realloc(like=array, shape=shape, dtype=np.uint32)
     if array.is_gpu():
         # GPU mode
-        argmin_column_along_rows_gpu(array=array.gpu_data(), argmin=argmin.gpu_data())
+        numba_gpu.argmin_column_along_rows(array=array.gpu_data(), argmin=argmin.gpu_data())
     else:
         # CPU mode
         array_numpy = array.numpy()
         argmin_numpy = argmin.numpy().reshape(-1)
         if is_use_njit(**kwargs):
-            argmin_column_along_rows_cpu_njit(array=array_numpy, argmin=argmin_numpy)
+            numba_cpu.argmin_column_along_rows(array=array_numpy, argmin=argmin_numpy)
         else:
-            argmin_column_along_rows_py(array=array_numpy, argmin=argmin_numpy)
+            python_native.argmin_column_along_rows(array=array_numpy, argmin=argmin_numpy)
