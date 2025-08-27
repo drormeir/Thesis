@@ -3,18 +3,18 @@ from python.hpc import globals
 if not globals.cpu_njit_num_threads:
     # Mock API
     from python.hpc import raise_njit_not_available
-    def topk_cpu_njit(**kwargs) -> None: # type: ignore
+    def top_k(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def bonferroni_cpu_njit(**kwargs) -> None: # type: ignore
+    def bonferroni(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
-    def benjamini_hochberg_cpu_njit(**kwargs) -> None: # type: ignore
+    def benjamini_hochberg(**kwargs) -> None: # type: ignore
         raise_njit_not_available()
 else:
     import numpy as np
     import numba
 
     @numba.njit(parallel=True)
-    def topk_cpu_njit(sorted_p_values_input: np.ndarray,\
+    def top_k(sorted_p_values_input: np.ndarray,\
                 num_discoveries_output: np.ndarray) -> None:
         num_monte, N = sorted_p_values_input.shape
         num_monte = np.uint32(num_monte)
@@ -25,7 +25,7 @@ else:
             num_discoveries_output[row,:] = num_discoveries
         
     @numba.njit(parallel=True)
-    def bonferroni_cpu_njit(sorted_p_values_input: np.ndarray,\
+    def bonferroni(sorted_p_values_input: np.ndarray,\
                 num_discoveries_output: np.ndarray) -> None:
         num_monte, N = num_discoveries_output.shape
         for row in numba.prange(num_monte):
@@ -39,7 +39,7 @@ else:
                 out_row[ind_col] = num_discover
 
     @numba.njit(parallel=True)
-    def benjamini_hochberg_cpu_njit(sorted_p_values_input: np.ndarray,\
+    def benjamini_hochberg(sorted_p_values_input: np.ndarray,\
                 num_discoveries_output: np.ndarray) -> None:
         num_monte, N = num_discoveries_output.shape
         for row in numba.prange(num_monte):

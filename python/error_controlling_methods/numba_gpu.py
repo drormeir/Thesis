@@ -3,23 +3,20 @@ from python.hpc import globals
 if not globals.cuda_available:
     # Mock API
     from python.hpc import raise_cuda_not_available
-    def topk_gpu(**kwargs) -> None: # type: ignore
+    def top_k(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def bonferroni_gpu(**kwargs) -> None: # type: ignore
+    def bonferroni(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
-    def benjamini_hochberg_gpu(**kwargs) -> None: # type: ignore
+    def benjamini_hochberg(**kwargs) -> None: # type: ignore
         raise_cuda_not_available()
 else:
-    import math
     import numpy as np
     import numba
     import numba.cuda
     from numba.cuda.cudadrv.devicearray import DeviceNDArray
-    from python.random_integers.numba_gpu import random_integer_gpu, random_integer_base_states_gpu, random_integer_states_transition_gpu, random_integer_result_gpu
-    import cupy
 
     @numba.cuda.jit(device=False)
-    def topk_gpu(sorted_p_values_input: DeviceNDArray,\
+    def top_k(sorted_p_values_input: DeviceNDArray,\
                num_discoveries_output: DeviceNDArray) -> None:
         # Get the 2D indices of the current thread within the grid
         row0 = numba.cuda.grid(1) # type: ignore
@@ -32,7 +29,7 @@ else:
                 out_row[ind_col] = ind_col+1
 
     @numba.cuda.jit(device=False)
-    def bonferroni_gpu(sorted_p_values_input: DeviceNDArray,\
+    def bonferroni(sorted_p_values_input: DeviceNDArray,\
                num_discoveries_output: DeviceNDArray) -> None:
         # Get the 2D indices of the current thread within the grid
         row0 = numba.cuda.grid(1) # type: ignore
@@ -50,7 +47,7 @@ else:
                 out_row[ind_col] = num_discover
 
     @numba.cuda.jit(device=False)
-    def benjamini_hochberg_gpu(sorted_p_values_input: DeviceNDArray,\
+    def benjamini_hochberg(sorted_p_values_input: DeviceNDArray,\
                num_discoveries_output: DeviceNDArray) -> None:
         # Get the 2D indices of the current thread within the grid
         row0 = numba.cuda.grid(1) # type: ignore

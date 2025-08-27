@@ -1,11 +1,11 @@
 import numpy as np
 
-def topk_py(sorted_p_values_input: np.ndarray,\
+def top_k(sorted_p_values_input: np.ndarray,\
             num_discoveries_output: np.ndarray) -> None:
     num_monte, N = sorted_p_values_input.shape
     num_discoveries_output[:] = np.repeat(np.arange(1,N+1).reshape(1,-1), num_monte, axis=0)
 
-def bonferroni_py(sorted_p_values_input: np.ndarray,\
+def bonferroni(sorted_p_values_input: np.ndarray,\
                num_discoveries_output: np.ndarray) -> None:
     num_monte, N = num_discoveries_output.shape
     for row in range(num_monte):
@@ -18,7 +18,7 @@ def bonferroni_py(sorted_p_values_input: np.ndarray,\
                 num_discover += 1
             out_row[col] = num_discover
 
-def benjamini_hochberg_py(sorted_p_values_input: np.ndarray,\
+def benjamini_hochberg(sorted_p_values_input: np.ndarray,\
                num_discoveries_output: np.ndarray) -> None:
     num_monte, N = num_discoveries_output.shape
     for row in range(num_monte):
