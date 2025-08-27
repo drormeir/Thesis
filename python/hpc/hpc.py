@@ -513,6 +513,13 @@ def calc_block_size(data_size: int|np.uint64|np.uint32,\
     assert block_size > 0
     return np.uint32(block_size)
 
+
+def is_use_gpu(**kwargs) -> bool:
+    if not globals.cuda_available:
+        return False
+    val = kwargs.get('use_gpu', None)
+    return val is None or val
+
 ############################################################
 
 globals.cpu_njit_num_threads = init_njit()
