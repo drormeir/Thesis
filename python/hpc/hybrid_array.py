@@ -141,6 +141,17 @@ class HybridArray:
             return self.data.copy_to_host()
         return np.empty(shape=(0,))
     
+    def copy_from(self, other: 'HybridArray', inplace: bool = True) -> 'HybridArray':
+        assert inplace
+        self.realloc_like(other)
+        if self.is_gpu():
+            assert isinstance(self.data, DeviceNDArray)
+            self.data[:] = other.gpu_data()[:]
+        else:
+            assert isinstance(other.data, np.ndarray)
+            self.data[:] = other.numpy()[:]
+        return self
+
     def numpy(self) -> np.ndarray:
         if self.original_numpy_data is not None:
             assert isinstance(self.data, np.ndarray)
